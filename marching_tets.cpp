@@ -288,8 +288,7 @@ namespace mtr
                     RowVector3d t2a = GenerateTriangle(p0, p2, v0, v2);
                     RowVector3d t3a = GenerateTriangle(p0, p3, v0, v3);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
-                    //f_i.insert(f_i.end(), {t, t+1, t+2});
-                    f_i.insert(f_i.end(), {t+2, t+1, t});
+                    f_i.insert(f_i.end(), {t, t+1, t+2});
 
                     t += 3;
                     break;
@@ -312,6 +311,7 @@ namespace mtr
                     RowVector3d t3a = GenerateTriangle(p1, p3, v1, v3);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t+2, t+1, t});
+                    //f_i.insert(f_i.end(), {t, t+1, t+2});
 
                     t += 3;
 
@@ -320,6 +320,7 @@ namespace mtr
                     RowVector3d t3b = GenerateTriangle(p0, p2, v0, v2);
                     v_i.insert(v_i.end(), {t1b(0),t1b(1),t1b(2),t2b(0),t2b(1),t2b(2),t3b(0),t3b(1),t3b(2)});
                     f_i.insert(f_i.end(), {t+2, t+1, t});
+                    //f_i.insert(f_i.end(), {t, t+1, t+2});
 
                     t += 3;
                     break;
@@ -453,7 +454,8 @@ namespace mtr
                     RowVector3d t2a = GenerateTriangle(p2, p1, v2, v1);
                     RowVector3d t3a = GenerateTriangle(p2, p3, v2, v3);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
-                    f_i.insert(f_i.end(), {t, t+1, t+2});
+                    //f_i.insert(f_i.end(), {t, t+1, t+2});
+                    f_i.insert(f_i.end(), {t+2, t+1, t});
 
                     t += 3;
                     break;

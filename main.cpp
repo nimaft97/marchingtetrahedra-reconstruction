@@ -1,7 +1,6 @@
 #include "recon_utils.h"
 #include "marching_tets.h"
 #include "utils.h"
-//#include <Eigen/Core>
 #include <igl/opengl/glfw/Viewer.h>
 #include <igl/grid.h>
 #include <igl/tetrahedralized_grid.h>
@@ -33,7 +32,7 @@ int main(int argc, char *argv[])
   mtr::generate_constraints_and_values(V, N, C, D, eps);
 
   /*** 3. Generate a tet grid ***/
-  Eigen::RowVector3i num_tets = Eigen::RowVector3i(25,25,25); // number of tet points to generate in each direction
+  Eigen::RowVector3i num_tets = Eigen::RowVector3i(18,18,18); // number of tet points to generate in each direction
   Eigen::MatrixXd TV; // vertices of tet grid
   Eigen::MatrixXi TF; // tets of tet grid
   Eigen::RowVector3d gmin = V.colwise().minCoeff(); // grid minimum point
@@ -61,8 +60,15 @@ int main(int argc, char *argv[])
   Eigen::MatrixXi SF2; 
   mtr::largest_connected_component(SV2, SF, SF2);
 
+  igl::opengl::glfw::Viewer viewer;
+  viewer.data().clear();
+  viewer.data().set_mesh(SV2, SF2);
+  viewer.launch();
+
   
   // draw stuff
+  
+  /*
   bool draw = false;
 
   if (draw)
@@ -170,5 +176,7 @@ int main(int argc, char *argv[])
     };
     viewer.launch();
   }
+
+  */
 
 }
