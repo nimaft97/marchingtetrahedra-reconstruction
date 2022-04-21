@@ -2,6 +2,7 @@
 #include <unordered_map>
 #include <iostream>
 #include <string>
+#include <chrono>
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
@@ -9,6 +10,10 @@
 
 namespace mtr {
     using namespace std;
+    using std::chrono::high_resolution_clock;
+    using std::chrono::duration_cast;
+    using std::chrono::duration;
+    using std::chrono::milliseconds;
 
     template <typename T, int cols> 
     void matrix_to_2dvector(
@@ -878,34 +883,58 @@ namespace mtr {
         Eigen::Matrix<T, -1, 3> C; // implict function constraint points
         Eigen::Matrix<T, -1, 1> D; // implict function values at corresponding constraints
         double eps = 0.01 * (V.colwise().minCoeff() - V.colwise().maxCoeff()).norm();
+        auto t1 = high_resolution_clock::now();
         generate_constraints_and_values(V, N, C, D, eps);
+        auto t2 = high_resolution_clock::now();
+        duration<double, std::milli> ms_double = t2 - t1;
+        cout << "Constraint points and values computed in: " << ms_double.count() << "ms" << endl;
 
         // ### Step 2: Generate Tet grid ###
         Eigen::Matrix<T, -1, 3> TV; //vertices of tet grid
         Eigen::Matrix<int, -1, 4> TF; // tets of tet grid
-        Eigen::Matrix<int, 1, 3> num_tets {20, 20, 20};
+        Eigen::Matrix<int, 1, 3> num_tets {21, 21, 21}; // need to increase this to 35, 35, 35
         Eigen::Matrix<T, 1, 3> gmin = V.colwise().minCoeff(); // grid minimum point
         Eigen::Matrix<T, 1, 3> gmax = V.colwise().maxCoeff(); // grid maximum point
         Eigen::Matrix<T, 1, 3> padding {eps, eps, eps}; // additional padding for the grid
+        t1 = high_resolution_clock::now();
         generate_grid(TV, num_tets, gmin, gmax, padding); // generate grid
         generate_tets_from_grid(TF, TV, num_tets);
+        t2 = high_resolution_clock::now();
+        ms_double = t2 - t1;
+        cout << "Tet grid generated in: " << ms_double.count() << "ms" << endl;
 
         // ### Step 3: Compute implict function values at all tet grid points ###
         Eigen::Matrix<T, -1, 1> fx;
         double welland_radius = 3.0; // TODO: try to define this programatically
+        t1 = high_resolution_clock::now();
         compute_implicit_function_values(fx, TV, C, D, welland_radius);
+        t2 = high_resolution_clock::now();
+        ms_double = t2 - t1;
+        cout << "Implicit function values calculated in: " << ms_double.count() << "ms" << endl;
 
         // ### Step 4: March tets and extract iso surface ###
         Eigen::Matrix<T, -1, 3> SV; // vertices of reconstructed mesh
         Eigen::Matrix<int, -1, 3> SF; // faces of reconstructed mesh
+        t1 = high_resolution_clock::now();
         marching_tetrahedra(TV, TF, fx, SV, SF);
+        t2 = high_resolution_clock::now();
+        ms_double = t2 - t1;
+        cout << "Marching tetrahedra completed in: " << ms_double.count() << "ms" << endl;
 
         // ### Cleanup ###
         Eigen::Matrix<T, -1, 3> SV2;
+        t1 = high_resolution_clock::now();
         merge_vertices(SV, SF, 0.00001, SV2);
+        t2 = high_resolution_clock::now();
+        ms_double = t2 - t1;
+        cout << "Vertices merged in: " << ms_double.count() << "ms" << endl;
 
         Eigen::Matrix<int, -1, 3> SF2;
+        t1 = high_resolution_clock::now();
         largest_connected_component(SV2, SF, SF2);
+        t2 = high_resolution_clock::now();
+        ms_double = t2 - t1;
+        cout << "Largest connected component found in: " << ms_double.count() << "ms" << endl;
 
         // test reconstruction
         igl::opengl::glfw::Viewer viewer;
