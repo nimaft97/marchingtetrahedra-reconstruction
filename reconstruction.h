@@ -6,7 +6,6 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
-#include <igl/opengl/glfw/Viewer.h>
 
 namespace mtr {
     using namespace std;
@@ -861,11 +860,16 @@ namespace mtr {
     template <typename T>
     pair<vector<vector<T>>, vector<vector<int>>> reconstruction(
         const vector<vector<T>> &vertices, // input data vertices
-        const vector<vector<T>> &normals // input data normals
+        const vector<vector<T>> &normals, // input data normals
+        const int nx, // reconstruction grid resolution x-direction
+        const int ny, // reconstruction grid resolution y-direction
+        const int nz, // reconstruction grid resolution z-direction
+        const double mesh_scale, // scale original mesh
+        const double welland_radius, // welland function height parameter
+        const double epsilon // distance control parameter
     ) 
     {
-        vector<vector<T>> V2; // reconstructed vertices
-        vector<vector<int>> F2; // reconstructed faces
+        
 
         // TODO: Enable ability to not provide normals, 
         //   and bring PCA-based normals back (or quadratic normals)
@@ -876,13 +880,13 @@ namespace mtr {
         vector2d_to_matrix(vertices, V);
         vector2d_to_matrix(normals, N);
 
-        V = V * 200; // welland weights computation performs better with scaling
+        V = V * mesh_scale; // welland weights computation performs better with scaling
         V =  V.rowwise() - V.colwise().mean(); // re-center data on origin
 
         // ### Step 1: Compute constraint points and values ###
         Eigen::Matrix<T, -1, 3> C; // implict function constraint points
         Eigen::Matrix<T, -1, 1> D; // implict function values at corresponding constraints
-        double eps = 0.01 * (V.colwise().minCoeff() - V.colwise().maxCoeff()).norm();
+        double eps = epsilon * (V.colwise().minCoeff() - V.colwise().maxCoeff()).norm();
         auto t1 = high_resolution_clock::now();
         generate_constraints_and_values(V, N, C, D, eps);
         auto t2 = high_resolution_clock::now();
@@ -892,7 +896,7 @@ namespace mtr {
         // ### Step 2: Generate Tet grid ###
         Eigen::Matrix<T, -1, 3> TV; //vertices of tet grid
         Eigen::Matrix<int, -1, 4> TF; // tets of tet grid
-        Eigen::Matrix<int, 1, 3> num_tets {21, 21, 21}; // need to increase this to 35, 35, 35
+        Eigen::Matrix<int, 1, 3> num_tets {nx, ny, nz}; 
         Eigen::Matrix<T, 1, 3> gmin = V.colwise().minCoeff(); // grid minimum point
         Eigen::Matrix<T, 1, 3> gmax = V.colwise().maxCoeff(); // grid maximum point
         Eigen::Matrix<T, 1, 3> padding {eps, eps, eps}; // additional padding for the grid
@@ -905,7 +909,6 @@ namespace mtr {
 
         // ### Step 3: Compute implict function values at all tet grid points ###
         Eigen::Matrix<T, -1, 1> fx;
-        double welland_radius = 3.0; // TODO: try to define this programatically
         t1 = high_resolution_clock::now();
         compute_implicit_function_values(fx, TV, C, D, welland_radius);
         t2 = high_resolution_clock::now();
@@ -936,13 +939,11 @@ namespace mtr {
         ms_double = t2 - t1;
         cout << "Largest connected component found in: " << ms_double.count() << "ms" << endl;
 
-        // test reconstruction
-        igl::opengl::glfw::Viewer viewer;
-        viewer.data().clear();
-        viewer.data().set_mesh(SV2, SF2);
-        viewer.launch();
-
-        // TODO: convert data back to vector format
+        // convert data back to vector format
+        vector<vector<T>> V2; // reconstructed vertices
+        vector<vector<int>> F2; // reconstructed faces
+        matrix_to_2dvector(SV2, V2);
+        matrix_to_2dvector(SF2, F2);
 
         return pair<vector<vector<T>>, vector<vector<int>>>(V2, F2);
     }
