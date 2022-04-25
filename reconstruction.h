@@ -7,6 +7,8 @@
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 
+#include "kdtree.hpp"
+
 namespace mtr {
     using namespace std;
     using std::chrono::high_resolution_clock;
@@ -97,38 +99,38 @@ namespace mtr {
         }
     }
     
-    template <typename T>
-    pair<vector<int>, vector<T> > get_nearest_neighbours_with_distances(
-        const Eigen::Matrix<T, -1, 3> &V, // set of points to look in
-        const Eigen::Matrix<T, 1, 3> &p, // the points to compute from
-        int n // the number of desired neighbors
-    )
-    {
-        vector<int> nn;
-        vector<T> nn_dist;
+    // template <typename T>
+    // pair<vector<int>, vector<T> > get_nearest_neighbours_with_distances(
+    //     const Eigen::Matrix<T, -1, 3> &V, // set of points to look in
+    //     const Eigen::Matrix<T, 1, 3> &p, // the points to compute from
+    //     int n // the number of desired neighbors
+    // )
+    // {
+    //     vector<int> nn;
+    //     vector<T> nn_dist;
         
-        Eigen::Matrix<T, -1, 1> distances = (V.rowwise() - p).rowwise().norm();
+    //     Eigen::Matrix<T, -1, 1> distances = (V.rowwise() - p).rowwise().norm();
 
-        // TODO: This is not the best way to do it, consider sorting the list using an insertion_sort 
-        //  to partially sort the list
-        // Find n minimums in distance vector
-        while(nn.size() < n)
-        {
-            int min_idx = -1; // assume first idx is minimum
-            double min_value = 100000000.0; // stupid hack, can't figure out why first point screws up
-            for (int i = 0; i < V.rows(); i++)
-            {
-                if ((find(nn.begin(), nn.end(), i) == nn.end()) && min_idx != i && distances(i) > 0.0 && distances(i) < min_value)
-                {
-                    min_value = distances(i);
-                    min_idx = i;
-                }
-            }
-            nn.insert(nn.end(), min_idx);
-            nn_dist.insert(nn_dist.end(), min_value);
-        }
-        return make_pair(nn, nn_dist);
-    }
+    //     // TODO: This is not the best way to do it, consider sorting the list using an insertion_sort 
+    //     //  to partially sort the list
+    //     // Find n minimums in distance vector
+    //     while(nn.size() < n)
+    //     {
+    //         int min_idx = -1; // assume first idx is minimum
+    //         double min_value = 100000000.0; // stupid hack, can't figure out why first point screws up
+    //         for (int i = 0; i < V.rows(); i++)
+    //         {
+    //             if ((find(nn.begin(), nn.end(), i) == nn.end()) && min_idx != i && distances(i) > 0.0 && distances(i) < min_value)
+    //             {
+    //                 min_value = distances(i);
+    //                 min_idx = i;
+    //             }
+    //         }
+    //         nn.insert(nn.end(), min_idx);
+    //         nn_dist.insert(nn_dist.end(), min_value);
+    //     }
+    //     return make_pair(nn, nn_dist);
+    // }
 
     template <typename T>
     pair<Eigen::Matrix<T, 1, 3>, T> compute_constraint_and_value(
@@ -158,6 +160,15 @@ namespace mtr {
     }
 
     template <typename T>
+    T distance(Kdtree::CoordPoint const& a, Kdtree::CoordPoint const& b){
+        size_t n = a.size();
+        T result = 0.0;
+        for (size_t i=0; i<n; i++)
+            result += pow(a[i]-b[i], 2);
+        return sqrt(result);
+    }
+
+    template <typename T>
     void generate_constraints_and_values(
         const Eigen::Matrix<T, -1, 3> &V, // original vertices
         const Eigen::Matrix<T, -1, 3> &N, // original normals
@@ -169,25 +180,42 @@ namespace mtr {
         C = Eigen::Matrix<T, -1, 3>::Zero(V.rows()*3, V.cols()); // 3 constraints per point
         D = Eigen::Matrix<T, -1, 1>::Zero(V.rows()*3, 1); // 1 constraint value per constraint point
 
+        // KDTree construction
+        Kdtree::KdNodeVector nodes;
+        for (int i = 0; i < V.rows(); i++){
+            Kdtree::CoordPoint point(3);
+            point = {V(i, 0), V(i, 1), V(i, 2)};
+            nodes.push_back(Kdtree::KdNode(point));
+        }
+        Kdtree::KdTree tree(&nodes);
+        cerr << "KdTree contructed!\n";
+
+
         for (int i = 0; i < V.rows(); i++)
         {
             Eigen::Matrix<T, 1, 3> p = V.row(i);
             Eigen::Matrix<T, 1, 3> n1 = N.row(i);
             Eigen::Matrix<T, 1, 3> n2 = -N.row(i);
 
-            pair<vector<int>, vector<T> > nn = get_nearest_neighbours_with_distances(V, p, 1);
+            //kNN search
+            Kdtree::KdNodeVector nn;
+            Kdtree::CoordPoint query_point(3);
+            query_point = {V(i, 0), V(i, 1), V(i, 2)};
+            tree.k_nearest_neighbors(query_point, 2, &nn);
+            // the second nearest is desired since the nearest is the same point
+            T nn_dist = distance<T>(query_point, nn[1].point);
 
             // first set of constraints and points are the vertices themselves
             C.row(i) = V.row(i); // use data vertices as one set of constraints
             D(i) = 0.0; // implict function evaluates to 0 at the vertex
 
             // second set of constraints, points outside of the mesh
-            pair<Eigen::Matrix<T, 1, 3>, T> c_d1 = compute_constraint_and_value(p, n1, eps, nn.second[0]);
+            pair<Eigen::Matrix<T, 1, 3>, T> c_d1 = compute_constraint_and_value(p, n1, eps, nn_dist);
             C.row(V.rows() + i) = c_d1.first;
             D(V.rows() + i) = c_d1.second;
 
             // third set of constraints, points inside the mesh
-            pair<Eigen::Matrix<T, 1, 3>, T> c_d2 = compute_constraint_and_value(p, n2, eps, nn.second[0]);
+            pair<Eigen::Matrix<T, 1, 3>, T> c_d2 = compute_constraint_and_value(p, n2, eps, nn_dist);
             C.row(V.rows()*2 + i) = c_d2.first;
             D(V.rows()*2 + i) = -c_d2.second;
         }

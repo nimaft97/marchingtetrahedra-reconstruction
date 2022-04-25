@@ -11,6 +11,6 @@ include(libigl)
 # Add your project files
 file(GLOB SRC_FILES *.cpp)
 #add_executable(${PROJECT_NAME} ${SRC_FILES})
-add_executable(${PROJECT_NAME} main.cpp)
+add_executable(${PROJECT_NAME} main.cpp kdtree.cpp)
 target_link_libraries(${PROJECT_NAME} PUBLIC igl::glfw)
 
