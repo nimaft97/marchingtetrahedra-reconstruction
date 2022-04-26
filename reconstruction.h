@@ -96,7 +96,45 @@ namespace mtr {
             }
         }
     }
+
+
+    template <typename T>
+    pair<vector<int>, vector<T>> nearest_neighbours(
+        const Eigen::Matrix<T, -1, 3> &V, // vertices to look in
+        const Eigen::Matrix<T, 1, 3> &p, // the point to compute for
+        int k // number of desired nearest neighbours
+    )
+    {
+        vector<int> nn; // store nearest neighbours
+        vector<T> nn_dist; // corresponding distances
+
+        Eigen::Matrix<T, -1, 1> distances = (V.rowwise() - p).rowwise().norm();
+
+        int idx = 0;
+        double min_d;
+        int min_d_i;
+        while(nn.size() < k)
+        {
+            min_d = distances(idx);
+            min_d_i = idx;
+            for (int i = idx+1; i < distances.size(); i++)
+            {
+                
+                if (distances(i) > 0.0 && distances(i) < min_d && (find(nn.begin(), nn.end(), i) == nn.end()))
+                { // update current minimum
+                    min_d = distances(i);
+                    min_d_i = i;
+                }
+            }
+            nn.emplace_back(min_d_i);
+            nn_dist.emplace_back(min_d);
+            idx++;
+        }
+
+        return make_pair(nn, nn_dist);
+    }
     
+
     template <typename T>
     pair<vector<int>, vector<T> > get_nearest_neighbours_with_distances(
         const Eigen::Matrix<T, -1, 3> &V, // set of points to look in
@@ -109,7 +147,7 @@ namespace mtr {
         
         Eigen::Matrix<T, -1, 1> distances = (V.rowwise() - p).rowwise().norm();
 
-        // TODO: This is not the best way to do it, consider sorting the list using an insertion_sort 
+        // TODO: This is not the best way to do it, consider sorting the list using an selection sort 
         //  to partially sort the list
         // Find n minimums in distance vector
         while(nn.size() < n)
@@ -128,6 +166,54 @@ namespace mtr {
             nn_dist.insert(nn_dist.end(), min_value);
         }
         return make_pair(nn, nn_dist);
+    }
+
+    template <typename T>
+    void pca_normals(
+        const Eigen::Matrix<T, -1, 3> &V, // vertices
+        Eigen::Matrix<T, -1, 3> &N, // normals to fill
+        int k // number of neighbours to use for plane fit
+    )
+    {
+        N = Eigen::Matrix<T, -1, 3>::Zero(V.rows(), V.cols()); // 1 normal per vertex
+        Eigen::Matrix<T, 1, 3> p;
+        for (int i = 0; i < V.rows(); i++)
+        {
+            
+            p = V.row(i);
+            // 1. collect k nearest neighbours for this point
+            pair<vector<int>, vector<T>> nn = nearest_neighbours(V, p, k);
+            Eigen::Matrix<T, -1, 3> P;
+            extract_rows(V, nn.first, P);
+
+            // 2. Subtract centroid from each neighor point
+            Eigen::Matrix<T, 1, 3> m = P.colwise().mean();
+            P = P.rowwise() - m;
+            
+            // 3. Compute Scatter matrix
+            Eigen::Matrix<T, -1, -1> S = P.transpose() * P;
+            
+            // 4. Compute eigenvalues of S
+            Eigen::EigenSolver<Eigen::Matrix<T, -1, -1>> es(S);
+            Eigen::Matrix<T, 3, 3> eival_matrix = es.pseudoEigenvalueMatrix();
+            Eigen::Matrix<T, 3, 1> eigenvalues {eival_matrix(0,0), eival_matrix(1,1), eival_matrix(2,2)};
+            Eigen::Matrix<T, 3, 3> eigenvectors = es.pseudoEigenvectors();
+
+            // 5. Take the eigenvector corresponding to smallest eigenvalue as normal
+            int min_idx = 0;
+            T current_max = eival_matrix(min_idx, min_idx);
+            for (int j = min_idx + 1; j < 3; j++)
+            {
+                if (eival_matrix(j,j) < current_max)
+                {
+                    min_idx = j;
+                    current_max = eival_matrix(j, j);
+                }
+            }
+            
+            // 6. Set the normal
+            N.row(i) = eigenvectors.row(min_idx);
+        }
     }
 
     template <typename T>
@@ -869,17 +955,26 @@ namespace mtr {
         const double epsilon // distance control parameter
     ) 
     {
-        
-
-        // TODO: Enable ability to not provide normals, 
-        //   and bring PCA-based normals back (or quadratic normals)
-
         Eigen::Matrix<T, -1, 3> V; // input vertices
         Eigen::Matrix<T, -1, 3> N; // input normals
 
         vector2d_to_matrix(vertices, V);
         vector2d_to_matrix(normals, N);
 
+        auto t1 = high_resolution_clock::now();
+        auto t2 = high_resolution_clock::now();
+        duration<double, std::milli> ms_double;
+
+        // PCA normals don't well until we find a way to correct inversions
+        /*
+        cout << "PCA normals... ";
+        t1 = high_resolution_clock::now();
+        pca_normals(V, N, 10);
+        t2 = high_resolution_clock::now();
+        ms_double = t2 - t1;
+        cout << ms_double.count() << "ms" << endl;
+        */
+        
         V = V * mesh_scale; // welland weights computation performs better with scaling
         V =  V.rowwise() - V.colwise().mean(); // re-center data on origin
 
@@ -887,11 +982,12 @@ namespace mtr {
         Eigen::Matrix<T, -1, 3> C; // implict function constraint points
         Eigen::Matrix<T, -1, 1> D; // implict function values at corresponding constraints
         double eps = epsilon * (V.colwise().minCoeff() - V.colwise().maxCoeff()).norm();
-        auto t1 = high_resolution_clock::now();
+        t1 = high_resolution_clock::now();
+        cout << "Constraints and values... ";
         generate_constraints_and_values(V, N, C, D, eps);
-        auto t2 = high_resolution_clock::now();
-        duration<double, std::milli> ms_double = t2 - t1;
-        cout << "Constraint points and values computed in: " << ms_double.count() << "ms" << endl;
+        t2 = high_resolution_clock::now();
+        ms_double = t2 - t1;
+        cout << ms_double.count() << "ms" << endl;
 
         // ### Step 2: Generate Tet grid ###
         Eigen::Matrix<T, -1, 3> TV; //vertices of tet grid
@@ -901,43 +997,48 @@ namespace mtr {
         Eigen::Matrix<T, 1, 3> gmax = V.colwise().maxCoeff(); // grid maximum point
         Eigen::Matrix<T, 1, 3> padding {eps, eps, eps}; // additional padding for the grid
         t1 = high_resolution_clock::now();
+        cout << "Tet grid... ";
         generate_grid(TV, num_tets, gmin, gmax, padding); // generate grid
         generate_tets_from_grid(TF, TV, num_tets);
         t2 = high_resolution_clock::now();
         ms_double = t2 - t1;
-        cout << "Tet grid generated in: " << ms_double.count() << "ms" << endl;
+        cout << ms_double.count() << "ms" << endl;
 
         // ### Step 3: Compute implict function values at all tet grid points ###
         Eigen::Matrix<T, -1, 1> fx;
         t1 = high_resolution_clock::now();
+        cout << "Implict function values... ";
         compute_implicit_function_values(fx, TV, C, D, welland_radius);
         t2 = high_resolution_clock::now();
         ms_double = t2 - t1;
-        cout << "Implicit function values calculated in: " << ms_double.count() << "ms" << endl;
+        cout << ms_double.count() << "ms" << endl;
 
         // ### Step 4: March tets and extract iso surface ###
         Eigen::Matrix<T, -1, 3> SV; // vertices of reconstructed mesh
         Eigen::Matrix<int, -1, 3> SF; // faces of reconstructed mesh
         t1 = high_resolution_clock::now();
+        cout << "Marching tetrahedra... ";
         marching_tetrahedra(TV, TF, fx, SV, SF);
         t2 = high_resolution_clock::now();
         ms_double = t2 - t1;
-        cout << "Marching tetrahedra completed in: " << ms_double.count() << "ms" << endl;
+        cout << ms_double.count() << "ms" << endl;
 
         // ### Cleanup ###
         Eigen::Matrix<T, -1, 3> SV2;
         t1 = high_resolution_clock::now();
+        cout << "Vertex merge... ";
         merge_vertices(SV, SF, 0.00001, SV2);
         t2 = high_resolution_clock::now();
         ms_double = t2 - t1;
-        cout << "Vertices merged in: " << ms_double.count() << "ms" << endl;
+        cout << ms_double.count() << "ms" << endl;
 
         Eigen::Matrix<int, -1, 3> SF2;
         t1 = high_resolution_clock::now();
+        cout << "Largest connected component search... ";
         largest_connected_component(SV2, SF, SF2);
         t2 = high_resolution_clock::now();
         ms_double = t2 - t1;
-        cout << "Largest connected component found in: " << ms_double.count() << "ms" << endl;
+        cout << ms_double.count() << "ms" << endl;
 
         // convert data back to vector format
         vector<vector<T>> V2; // reconstructed vertices
