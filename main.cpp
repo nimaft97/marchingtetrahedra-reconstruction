@@ -22,15 +22,15 @@ int main(int argc, char *argv[])
     mtr::matrix_to_2dvector<double, 3>(N, normals);
 
     std::pair<std::vector<std::vector<double>>, std::vector<std::vector<int>> > R;
-    R = mtr::reconstruction<double>(vertices, normals, 20, 20, 20, 200.0, 4.0, 0.01);
+    R = mtr::reconstruction<double>(vertices, normals, 12, 12, 12, 200.0, 4.0, 0.01);
 
     // reconstructed mesh in Eigen matrices
     Eigen::Matrix<double, -1, 3> V2;
     Eigen::Matrix<int, -1, 3> F2;
 
     // convert data into Eigen matrices for plotting
-    mtr::vector2d_to_matrix(R.first, V2);
-    mtr::vector2d_to_matrix(R.second, F2);
+    mtr::vector2d_to_matrix<double, 3>(R.first, V2);
+    mtr::vector2d_to_matrix<int, 3>(R.second, F2);
 
     // test reconstruction
     igl::opengl::glfw::Viewer viewer;
