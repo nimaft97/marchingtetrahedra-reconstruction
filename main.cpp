@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
     mtr::matrix_to_2dvector<double, 3>(N, normals);
 
     std::pair<std::vector<std::vector<double>>, std::vector<std::vector<int>> > R;
-    R = mtr::reconstruction<double>(vertices, normals, 12, 12, 12, 200.0, 4.0, 0.01);
+    R = mtr::reconstruction<double>(vertices, normals, 20, 20, 20, 200.0, 4.0, 0.01);
 
     // reconstructed mesh in Eigen matrices
     Eigen::Matrix<double, -1, 3> V2;
