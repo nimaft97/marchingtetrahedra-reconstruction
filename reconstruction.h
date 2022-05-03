@@ -1,4 +1,7 @@
+#pragma once
+
 #include <vector>
+#include <stack>
 #include <unordered_map>
 #include <iostream>
 #include <string>
@@ -98,39 +101,6 @@ namespace mtr {
             }
         }
     }
-    
-    // template <typename T>
-    // pair<vector<int>, vector<T> > get_nearest_neighbours_with_distances(
-    //     const Eigen::Matrix<T, -1, 3> &V, // set of points to look in
-    //     const Eigen::Matrix<T, 1, 3> &p, // the points to compute from
-    //     int n // the number of desired neighbors
-    // )
-    // {
-    //     vector<int> nn;
-    //     vector<T> nn_dist;
-        
-    //     Eigen::Matrix<T, -1, 1> distances = (V.rowwise() - p).rowwise().norm();
-
-    //     // TODO: This is not the best way to do it, consider sorting the list using an insertion_sort 
-    //     //  to partially sort the list
-    //     // Find n minimums in distance vector
-    //     while(nn.size() < n)
-    //     {
-    //         int min_idx = -1; // assume first idx is minimum
-    //         double min_value = 100000000.0; // stupid hack, can't figure out why first point screws up
-    //         for (int i = 0; i < V.rows(); i++)
-    //         {
-    //             if ((find(nn.begin(), nn.end(), i) == nn.end()) && min_idx != i && distances(i) > 0.0 && distances(i) < min_value)
-    //             {
-    //                 min_value = distances(i);
-    //                 min_idx = i;
-    //             }
-    //         }
-    //         nn.insert(nn.end(), min_idx);
-    //         nn_dist.insert(nn_dist.end(), min_value);
-    //     }
-    //     return make_pair(nn, nn_dist);
-    // }
 
     template <typename T>
     pair<Eigen::Matrix<T, 1, 3>, T> compute_constraint_and_value(
@@ -692,7 +662,82 @@ namespace mtr {
         }
     }
 
-    template <typename T>
+    // template <typename T> // version 1
+    // void merge_vertices(
+    //     const Eigen::Matrix<T, -1, 3> &V, // original vertices
+    //     Eigen::Matrix<int, -1, 3> &F, // faces
+    //     T eps, // merge threshold
+    //     Eigen::Matrix<T, -1, 3> &V2 // new vertices
+    // )
+    // {
+    //     // constructing KDTree
+    //     Kdtree::KdNodeVector nodes;
+    //     for (int i = 0; i < V.rows(); i++)
+    //     {
+    //         Kdtree::CoordPoint point(3);
+    //         point = {V(i, 0), V(i, 1), V(i, 2)};
+    //         Kdtree::KdNode tmp(point);
+    //         tmp.idx = i;
+    //         nodes.push_back(tmp);
+    //     }
+
+    //     Kdtree::KdTree tree(&nodes);
+    //     cout << "KdTree constructed in merge_vertices!\n";
+
+    //     vector<Eigen::Matrix<T, 1, 3>> new_verts; // Eigen conservative resize is too heavy, this should be faster
+    //     int current_new_v_i = 0;
+    //     stack<Kdtree::kdtree_node*> nodes_stack;
+    //     nodes_stack.push(tree.root);
+    //     while (!nodes_stack.empty()){
+    //         Kdtree::kdtree_node* current_node = nodes_stack.top();
+    //         nodes_stack.pop();
+    //         // if we set current_node's is_visited to true, then result may be empty in some cases!
+    //         // cout << "idx: " << current_node->idx << " - point: " << current_node->point[0] << "," << current_node->point[1] << "," << current_node->point[2] << "\n";
+            
+    //         if (!(current_node->is_visited)){
+
+    //             vector<int> to_merge;
+
+    //             // range search on KDTree
+    //             Kdtree::KdNodeVector result;
+    //             tree.range_nearest_neighbors(current_node->point, eps, &result);
+
+    //             // merge vertices, add vertex to new set and update references in F to point to new vertex set index
+    //             Eigen::Matrix<T, 1, 3> P {0.0, 0.0, 0.0}; // new point
+    //             for (int j = 0; j < result.size(); j++)
+    //             {
+    //                 to_merge.push_back(result.at(j).idx);
+    //                 Eigen::Matrix<T, 1, 3> n_P;
+    //                 n_P << result.at(j).point.at(0), result.at(j).point.at(1), result.at(j).point.at(2);
+    //                 P += n_P;
+    //             }
+    //             P /= to_merge.size();
+    //             new_verts.emplace_back(P);
+    //             replace_values(F, to_merge, current_new_v_i);
+    //             current_new_v_i++;
+    //             if (current_node->idx < 22){
+    //                 cout << current_node->idx << ": ";
+    //                 for (auto e : to_merge) cout << e << ", ";
+    //                 cout << "\n";
+    //             }
+    //         }
+
+    //         if (current_node->loson)    nodes_stack.push(current_node->loson);
+    //         if (current_node->hison)    nodes_stack.push(current_node->hison);
+    //     }
+
+    //     cerr << "size of new_verts: " << new_verts.size() << "\n";
+
+    //     // fill V2 with new verts
+    //     V2 = Eigen::Matrix<T, -1, 3>::Zero(new_verts.size(), V.cols());
+    //     for (int i = 0; i < new_verts.size(); i++)
+    //     {
+    //         V2.row(i) = new_verts[i];
+    //     }
+    // }
+
+
+    template <typename T> // version 2
     void merge_vertices(
         const Eigen::Matrix<T, -1, 3> &V, // original vertices
         Eigen::Matrix<int, -1, 3> &F, // faces
@@ -700,55 +745,46 @@ namespace mtr {
         Eigen::Matrix<T, -1, 3> &V2 // new vertices
     )
     {
-        // kind of a hash table where index i represents vertex i, 
-        // flag sets whether we have 'seen' this vertex
-        vector<bool> seen = vector<bool>(V.rows(), false); 
-        vector<int> merged;
-        vector<Eigen::Matrix<T, 1, 3>> new_verts; // Eigen conservative resize is too heavy, this should be faster
-
-        int current_new_v_i = 0;
+        // constructing KDTree
+        Kdtree::KdNodeVector nodes;
         for (int i = 0; i < V.rows(); i++)
         {
-            if(!seen[i]) // Note: Only process this vert if we haven't seen it yet!
-            {
-                // first build a temporary set of points from the vertices we SHOULD be searching...
-                vector<int> indices;
-                for (int j = 0; j < V.rows(); j++)
-                {
-                    if(!seen[j]) { indices.emplace_back(j);}
-                }
+            Kdtree::CoordPoint point(3);
+            point = {V(i, 0), V(i, 1), V(i, 2)};
+            Kdtree::KdNode tmp(point);
+            tmp.idx = i;
+            nodes.push_back(tmp);
+        }
 
-                // now that we have the indices to look through, extract rows from V into temp
-                Eigen::Matrix<T, -1, 3> V_tmp;
-                extract_rows(V, indices, V_tmp);
- 
-                // calculate distances from our current point to all points in V_tmp
-                Eigen::Matrix<T, -1, 1> d = (V_tmp.rowwise() - V.row(i)).rowwise().norm();
-                vector<int> to_merge;
-                for (int j = 0; j < d.size(); j++)
-                {
-                    if(d(j) < eps)
-                    {
-                        to_merge.emplace_back(indices[j]);
-                    }
-                }
+        Kdtree::KdTree tree(&nodes);
+        cout << "KdTree constructed in merge_vertices!\n";
 
-                // merge vertices, add vertex to new set and update references in F to point to new vertex set index
+        vector<Eigen::Matrix<T, 1, 3>> new_verts; // Eigen conservative resize is too heavy, this should be faster
+        int current_new_v_i = 0;
+
+        for (int i=0; i<V.rows(); i++){
+            vector<int> to_merge;
+            // range search on KDTree
+            Kdtree::CoordPoint point = {V(i, 0), V(i, 1), V(i, 2)};
+            Kdtree::KdNodeVector result;
+            tree.range_nearest_neighbors(point, eps, &result);
+            if (result.size() > 0){ // if point was not visited
                 Eigen::Matrix<T, 1, 3> P {0.0, 0.0, 0.0}; // new point
-                if (to_merge.size() > 0) // can't do division by zero
+                for (int j = 0; j < result.size(); j++)
                 {
-                    for (int j = 0; j < to_merge.size(); j++)
-                    {
-                        P += V.row(to_merge[j]);
-                        seen[to_merge[j]] = true;
-                    }
-                    P /= to_merge.size();
-                    new_verts.emplace_back(P);
-                    replace_values(F, to_merge, current_new_v_i);
-                    current_new_v_i++;
+                    to_merge.push_back(result.at(j).idx);
+                    Eigen::Matrix<T, 1, 3> n_P;
+                    n_P << result.at(j).point.at(0), result.at(j).point.at(1), result.at(j).point.at(2);
+                    P += n_P;
                 }
+                P /= to_merge.size();
+                new_verts.emplace_back(P);
+                replace_values(F, to_merge, current_new_v_i);
+                current_new_v_i++;
             }
         }
+        cerr << "size of new_verts: " << new_verts.size() << "\n";
+
         // fill V2 with new verts
         V2 = Eigen::Matrix<T, -1, 3>::Zero(new_verts.size(), V.cols());
         for (int i = 0; i < new_verts.size(); i++)
@@ -756,6 +792,80 @@ namespace mtr {
             V2.row(i) = new_verts[i];
         }
     }
+
+
+    // template <typename T> // original
+    // void merge_vertices(
+    //     const Eigen::Matrix<T, -1, 3> &V, // original vertices
+    //     Eigen::Matrix<int, -1, 3> &F, // faces
+    //     T eps, // merge threshold
+    //     Eigen::Matrix<T, -1, 3> &V2 // new vertices
+    // )
+    // {
+    //     // kind of a hash table where index i represents vertex i, 
+    //     // flag sets whether we have 'seen' this vertex
+    //     vector<bool> seen = vector<bool>(V.rows(), false); 
+    //     vector<int> merged;
+    //     vector<Eigen::Matrix<T, 1, 3>> new_verts; // Eigen conservative resize is too heavy, this should be faster
+
+    //     int current_new_v_i = 0;
+    //     for (int i = 0; i < V.rows(); i++)
+    //     {
+    //         if(!seen[i]) // Note: Only process this vert if we haven't seen it yet!
+    //         {
+    //             // first build a temporary set of points from the vertices we SHOULD be searching...
+    //             vector<int> indices;
+    //             for (int j = 0; j < V.rows(); j++)
+    //             {
+    //                 if(!seen[j]) { indices.emplace_back(j);}
+    //             }
+
+    //             // now that we have the indices to look through, extract rows from V into temp
+    //             Eigen::Matrix<T, -1, 3> V_tmp;
+    //             extract_rows(V, indices, V_tmp);
+ 
+    //             // calculate distances from our current point to all points in V_tmp
+    //             Eigen::Matrix<T, -1, 1> d = (V_tmp.rowwise() - V.row(i)).rowwise().norm();
+    //             vector<int> to_merge;
+    //             for (int j = 0; j < d.size(); j++)
+    //             {
+    //                 if(d(j) < eps)
+    //                 {
+    //                     to_merge.emplace_back(indices[j]);
+    //                 }
+    //             }
+
+    //             // merge vertices, add vertex to new set and update references in F to point to new vertex set index
+    //             Eigen::Matrix<T, 1, 3> P {0.0, 0.0, 0.0}; // new point
+    //             if (to_merge.size() > 0) // can't do division by zero
+    //             {
+    //                 for (int j = 0; j < to_merge.size(); j++)
+    //                 {
+    //                     P += V.row(to_merge[j]);
+    //                     seen[to_merge[j]] = true;
+    //                 }
+    //                 P /= to_merge.size();
+    //                 new_verts.emplace_back(P);
+    //                 replace_values(F, to_merge, current_new_v_i);
+    //                 current_new_v_i++;
+    //                 if (i < 20){
+    //                     cout << i << ": ";
+    //                     for (auto e : to_merge) cout << e << ", ";
+    //                     cout << "\n";
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     cerr << "size of new_verts: " << new_verts.size() << "\n";
+
+    //     // fill 2 with new verts
+    //     V2 = Eigen::Matrix<T, -1, 3>::Zero(new_verts.size(), V.cols());
+    //     for (int i = 0; i < new_verts.size(); i++)
+    //     {
+    //         V2.row(i) = new_verts[i];
+    //     }
+    // }
 
     template <typename T>
     void depth_first_search(

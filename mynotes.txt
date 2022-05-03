@@ -1,0 +1,6 @@
+1. replace your distance function with the distance class provided by the author
+
+2. in this version, in order to perform mergings, a simple predicate has been added 
+to range_search function. However, this can be implemented as a template function or functor.
+
+3. add optimization flags
