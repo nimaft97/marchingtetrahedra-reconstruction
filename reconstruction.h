@@ -61,7 +61,7 @@ namespace mtr {
         {
             if (distances(d) < radius)
             {
-                pi.push_back(d);
+                pi.push_back(d); // replace with emplace_back?
             }
         }
         return pi;
@@ -99,6 +99,54 @@ namespace mtr {
                     M(i,j) = new_val;
                 }
             }
+        }
+    }
+
+    template <typename T>
+    void pca_normals(
+        const Eigen::Matrix<T, -1, 3> &V, // vertices
+        Eigen::Matrix<T, -1, 3> &N, // normals to fill
+        int k // number of neighbours to use for plane fit
+    )
+    {
+        N = Eigen::Matrix<T, -1, 3>::Zero(V.rows(), V.cols()); // 1 normal per vertex
+        Eigen::Matrix<T, 1, 3> p;
+        for (int i = 0; i < V.rows(); i++)
+        {
+            
+            p = V.row(i);
+            // 1. collect k nearest neighbours for this point
+            pair<vector<int>, vector<T>> nn = nearest_neighbours(V, p, k);
+            Eigen::Matrix<T, -1, 3> P;
+            extract_rows<T, 3>(V, nn.first, P);
+
+            // 2. Subtract centroid from each neighor point
+            Eigen::Matrix<T, 1, 3> m = P.colwise().mean();
+            P = P.rowwise() - m;
+            
+            // 3. Compute Scatter matrix
+            Eigen::Matrix<T, -1, -1> S = P.transpose() * P;
+            
+            // 4. Compute eigenvalues of S
+            Eigen::EigenSolver<Eigen::Matrix<T, -1, -1>> es(S);
+            Eigen::Matrix<T, 3, 3> eival_matrix = es.pseudoEigenvalueMatrix();
+            Eigen::Matrix<T, 3, 1> eigenvalues {eival_matrix(0,0), eival_matrix(1,1), eival_matrix(2,2)};
+            Eigen::Matrix<T, 3, 3> eigenvectors = es.pseudoEigenvectors();
+
+            // 5. Take the eigenvector corresponding to smallest eigenvalue as normal
+            int min_idx = 0;
+            T current_max = eival_matrix(min_idx, min_idx);
+            for (int j = min_idx + 1; j < 3; j++)
+            {
+                if (eival_matrix(j,j) < current_max)
+                {
+                    min_idx = j;
+                    current_max = eival_matrix(j, j);
+                }
+            }
+            
+            // 6. Set the normal
+            N.row(i) = eigenvectors.row(min_idx);
         }
     }
 
@@ -172,6 +220,7 @@ namespace mtr {
             tree.k_nearest_neighbors(query_point, 2, &nn);
             // the second nearest is desired since the nearest is the same point
             T nn_dist = distance<T>(query_point, nn[1].point);
+
 
             // first set of constraints and points are the vertices themselves
             C.row(i) = V.row(i); // use data vertices as one set of constraints
@@ -322,7 +371,7 @@ namespace mtr {
         // compute basis vector for first point to determine basis matrix size
         Eigen::Matrix<T, 1, -1> bv;
         Eigen::Matrix<T, 1, 3> p {P.row(0)};
-        polynomial_basis_vector(2, p, bv);
+        polynomial_basis_vector<T>(2, p, bv);
 
         B = Eigen::Matrix<T, -1, -1>::Zero(P.rows(), bv.size());
         for (int i = 0; i < P.rows(); i++)
@@ -345,14 +394,14 @@ namespace mtr {
         fx = Eigen::Matrix<T, -1, 1>::Zero(TV.rows()); // one function value per grid point
         Eigen::Matrix<T, 1, 3> p {TV.row(0)};
         Eigen::Matrix<T, 1, -1> b;
-        polynomial_basis_vector(2, p, b);
+        polynomial_basis_vector<T>(2, p, b);
         int min_num_pts = b.size();
 
         // evaluate the implict function at each point in the tet grid
         for (int i = 0; i < TV.rows(); i++)
         {
             Eigen::Matrix<T, 1, 3> p {TV.row(i)};
-            vector<int> pi = points_within_radius(C, p, w);            
+            vector<int> pi = points_within_radius<T>(C, p, w);            
 
             // assume this point is outside of the mesh
             if(pi.size() <= 0)
@@ -363,13 +412,13 @@ namespace mtr {
             {
                 Eigen::Matrix<T, -1, 3> P;
                 Eigen::Matrix<T, -1, 1> values;
-                extract_rows(C, pi, P);
-                extract_rows(D, pi, values);
+                extract_rows<T, 3>(C, pi, P);
+                extract_rows<T, 1>(D, pi, values);
 
                 Eigen::Matrix<T, -1, -1> W;
                 Eigen::Matrix<T, -1, -1> B;
-                generate_weights_matrix(P, p, w, W);
-                generate_basis_matrix(P, B);
+                generate_weights_matrix<T>(P, p, w, W);
+                generate_basis_matrix<T>(P, B);
 
                 // Solve: (B.T*W*B)a = (B.T*W*D) 
                 Eigen::Matrix<T, -1, -1> imd = B.transpose() * W;
@@ -381,12 +430,11 @@ namespace mtr {
 
                 // Calculate function value
                 Eigen::Matrix<T, 1, -1> gi;
-                polynomial_basis_vector(2, p, gi);
+                polynomial_basis_vector<T>(2, p, gi);
                 T v = gi.dot(a);
                 fx(i) = v;
             } 
         }
-        
     }
     
     template <typename T>
@@ -465,9 +513,9 @@ namespace mtr {
                 }
                 case 1: 
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p0, p1, v0, v1);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p0, p2, v0, v2);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p0, p3, v0, v3);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p0, p1, v0, v1);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p0, p2, v0, v2);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p0, p3, v0, v3);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t, t+1, t+2});
                     t += 3;
@@ -475,9 +523,9 @@ namespace mtr {
                 }
                 case 2:
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p1, p0, v1, v0);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p1, p3, v1, v3);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p1, p2, v1, v2);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p1, p0, v1, v0);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p1, p3, v1, v3);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p1, p2, v1, v2);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t, t+1, t+2});
                     t += 3;
@@ -485,15 +533,15 @@ namespace mtr {
                 }
                 case 3: 
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p0, p3, v0, v3);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p1, p2, v1, v2);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p1, p3, v1, v3);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p0, p3, v0, v3);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p1, p2, v1, v2);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p1, p3, v1, v3);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t+2, t+1, t});
                     t += 3;
                     Eigen::Matrix<T, 1, 3> t1b = t2a;
                     Eigen::Matrix<T, 1, 3> t2b = t1a;
-                    Eigen::Matrix<T, 1, 3> t3b = generate_triangle_point(p0, p2, v0, v2);
+                    Eigen::Matrix<T, 1, 3> t3b = generate_triangle_point<T>(p0, p2, v0, v2);
                     v_i.insert(v_i.end(), {t1b(0),t1b(1),t1b(2),t2b(0),t2b(1),t2b(2),t3b(0),t3b(1),t3b(2)});
                     f_i.insert(f_i.end(), {t+2, t+1, t});
                     t += 3;
@@ -501,9 +549,9 @@ namespace mtr {
                 }
                 case 4: 
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p2, p0, v2, v0);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p2, p1, v2, v1);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p2, p3, v2, v3);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p2, p0, v2, v0);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p2, p1, v2, v1);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p2, p3, v2, v3);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t, t+1, t+2});
                     t += 3;
@@ -511,14 +559,14 @@ namespace mtr {
                 }
                 case 5: 
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p0, p1, v0, v1);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p0, p3, v0, v3);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p1, p2, v1, v2);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p0, p1, v0, v1);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p0, p3, v0, v3);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p1, p2, v1, v2);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t+2, t+1, t});
                     t += 3;
                     Eigen::Matrix<T, 1, 3> t1b = t2a;
-                    Eigen::Matrix<T, 1, 3> t2b = generate_triangle_point(p2, p3, v2, v3);
+                    Eigen::Matrix<T, 1, 3> t2b = generate_triangle_point<T>(p2, p3, v2, v3);
                     Eigen::Matrix<T, 1, 3> t3b = t3a;
                     v_i.insert(v_i.end(), {t1b(0),t1b(1),t1b(2),t2b(0),t2b(1),t2b(2),t3b(0),t3b(1),t3b(2)});
                     f_i.insert(f_i.end(), {t+2, t+1, t});
@@ -527,15 +575,15 @@ namespace mtr {
                 }
                 case 6: 
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p0, p1, v0, v1);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p1, p3, v1, v3);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p0, p2, v0, v2);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p0, p1, v0, v1);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p1, p3, v1, v3);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p0, p2, v0, v2);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t, t+1, t+2});
                     t += 3;
                     Eigen::Matrix<T, 1, 3> t1b = t3a;
                     Eigen::Matrix<T, 1, 3> t2b = t2a;
-                    Eigen::Matrix<T, 1, 3> t3b = generate_triangle_point(p2, p3, v2, v3);
+                    Eigen::Matrix<T, 1, 3> t3b = generate_triangle_point<T>(p2, p3, v2, v3);
                     v_i.insert(v_i.end(), {t1b(0),t1b(1),t1b(2),t2b(0),t2b(1),t2b(2),t3b(0),t3b(1),t3b(2)});
                     f_i.insert(f_i.end(), {t, t+1, t+2});
                     t += 3;
@@ -543,9 +591,9 @@ namespace mtr {
                 }
                 case 7:
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p3, p0, v3, v0);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p3, p2, v3, v2);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p3, p1, v3, v1);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p3, p0, v3, v0);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p3, p2, v3, v2);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p3, p1, v3, v1);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t+2, t+1, t});
                     t += 3;
@@ -553,9 +601,9 @@ namespace mtr {
                 }
                 case 8:
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p3, p0, v3, v0);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p3, p2, v3, v2);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p3, p1, v3, v1);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p3, p0, v3, v0);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p3, p2, v3, v2);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p3, p1, v3, v1);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t, t+1, t+2});
                     t += 3;
@@ -563,15 +611,15 @@ namespace mtr {
                 }
                 case 9:
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p0, p1, v0, v1);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p1, p3, v1, v3);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p0, p2, v0, v2);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p0, p1, v0, v1);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p1, p3, v1, v3);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p0, p2, v0, v2);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t+2, t+1, t});
                     t += 3;
                     Eigen::Matrix<T, 1, 3> t1b = t3a;
                     Eigen::Matrix<T, 1, 3> t2b = t2a;
-                    Eigen::Matrix<T, 1, 3> t3b = generate_triangle_point(p2, p3, v2, v3);
+                    Eigen::Matrix<T, 1, 3> t3b = generate_triangle_point<T>(p2, p3, v2, v3);
                     v_i.insert(v_i.end(), {t1b(0),t1b(1),t1b(2),t2b(0),t2b(1),t2b(2),t3b(0),t3b(1),t3b(2)});
                     f_i.insert(f_i.end(), {t+2, t+1, t});
                     t += 3;
@@ -579,14 +627,14 @@ namespace mtr {
                 }
                 case 10:
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p0, p1, v0, v1);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p0, p3, v0, v3);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p1, p2, v1, v2);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p0, p1, v0, v1);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p0, p3, v0, v3);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p1, p2, v1, v2);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t, t+1, t+2});
                     t += 3;
                     Eigen::Matrix<T, 1, 3> t1b = t2a;
-                    Eigen::Matrix<T, 1, 3> t2b = generate_triangle_point(p2, p3, v2, v3);
+                    Eigen::Matrix<T, 1, 3> t2b = generate_triangle_point<T>(p2, p3, v2, v3);
                     Eigen::Matrix<T, 1, 3> t3b = t3a;
                     v_i.insert(v_i.end(), {t1b(0),t1b(1),t1b(2),t2b(0),t2b(1),t2b(2),t3b(0),t3b(1),t3b(2)});
                     f_i.insert(f_i.end(), {t, t+1, t+2});
@@ -595,9 +643,9 @@ namespace mtr {
                 }
                 case 11:
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p2, p0, v2, v0);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p2, p1, v2, v1);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p2, p3, v2, v3);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p2, p0, v2, v0);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p2, p1, v2, v1);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p2, p3, v2, v3);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t+2, t+1, t});
                     t += 3;
@@ -605,14 +653,14 @@ namespace mtr {
                 }
                 case 12:
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p0, p2, v0, v2);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p1, p2, v1, v2);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p1, p3, v1, v3);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p0, p2, v0, v2);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p1, p2, v1, v2);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p1, p3, v1, v3);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t, t+1, t+2});
                     t += 3;
                     Eigen::Matrix<T, 1, 3> t1b = t3a;
-                    Eigen::Matrix<T, 1, 3> t2b = generate_triangle_point(p0, p3, v0, v3);
+                    Eigen::Matrix<T, 1, 3> t2b = generate_triangle_point<T>(p0, p3, v0, v3);
                     Eigen::Matrix<T, 1, 3> t3b = t1a;
                     v_i.insert(v_i.end(), {t1b(0),t1b(1),t1b(2),t2b(0),t2b(1),t2b(2),t3b(0),t3b(1),t3b(2)});
                     f_i.insert(f_i.end(), {t, t+1, t+2});
@@ -621,9 +669,9 @@ namespace mtr {
                 }
                 case 13:
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p1, p0, v1, v0);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p1, p3, v1, v3);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p1, p2, v1, v2);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p1, p0, v1, v0);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p1, p3, v1, v3);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p1, p2, v1, v2);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t+2, t+1, t});
                     t += 3;
@@ -631,9 +679,9 @@ namespace mtr {
                 }
                 case 14:
                 {
-                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point(p0, p1, v0, v1);
-                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point(p0, p2, v0, v2);
-                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point(p0, p3, v0, v3);
+                    Eigen::Matrix<T, 1, 3> t1a = generate_triangle_point<T>(p0, p1, v0, v1);
+                    Eigen::Matrix<T, 1, 3> t2a = generate_triangle_point<T>(p0, p2, v0, v2);
+                    Eigen::Matrix<T, 1, 3> t3a = generate_triangle_point<T>(p0, p3, v0, v3);
                     v_i.insert(v_i.end(), {t1a(0),t1a(1),t1a(2),t2a(0),t2a(1),t2a(2),t3a(0),t3a(1),t3a(2)});
                     f_i.insert(f_i.end(), {t+2, t+1, t});
                     t += 3;
@@ -648,6 +696,9 @@ namespace mtr {
     
         // Note: Using conservative matrix resizing is super slow, so we
         // simply create and fill a matrix using interm vectors
+
+        // maybe convert the above and following sections to be 2d vectors and use conversion
+        // function instead for cleaner code
         SV = Eigen::Matrix<T, -1, 3>::Zero(v_i.size()/3, 3);
         SF = Eigen::Matrix<int, -1, 3>::Zero(f_i.size()/3,3);
         for(int i = 0; i < v_i.size(); i = i + 3)
@@ -668,6 +719,7 @@ namespace mtr {
         Eigen::Matrix<T, -1, 3> &V2 // new vertices
     )
     {
+
         // constructing KDTree
         Kdtree::KdNodeVector nodes;
         for (int i = 0; i < V.rows(); i++)
@@ -723,6 +775,7 @@ namespace mtr {
         T u // element to search for
     )
 	{
+        // TODO: Move this over into a graph class
 		visisted[u] = true;
 		output.push_back(u);
 
@@ -781,7 +834,7 @@ namespace mtr {
         const Eigen::Matrix<int, -1, 3> &F // face definitions used to compute edges
     ) 
 	{
-		unordered_map<int, vector<int> > adj = adjacency_list(F); // construct adjacency list of connected edges
+		unordered_map<int, vector<int> > adj = adjacency_list<int>(F); // construct adjacency list of connected edges
         unordered_map<int, vector<int>> cc;
 		vector<bool> seen(V.rows(), false); // hold which items we have seen so far
 
@@ -807,7 +860,7 @@ namespace mtr {
         Eigen::Matrix<int, -1, 3> &F2 // faces defining largest connected component
     )
     {
-        unordered_map<int, vector<int>> cc = connected_components(V, F);
+        unordered_map<int, vector<int>> cc = connected_components<T>(V, F);
         int largest_cc_size = 0;
         int largest_cc_key;
         for (auto kv : cc)
@@ -855,17 +908,26 @@ namespace mtr {
         const double epsilon // distance control parameter
     ) 
     {
-        
-
-        // TODO: Enable ability to not provide normals, 
-        //   and bring PCA-based normals back (or quadratic normals)
-
         Eigen::Matrix<T, -1, 3> V; // input vertices
         Eigen::Matrix<T, -1, 3> N; // input normals
 
-        vector2d_to_matrix(vertices, V);
-        vector2d_to_matrix(normals, N);
+        vector2d_to_matrix<T, 3>(vertices, V);
+        vector2d_to_matrix<T, 3>(normals, N);
 
+        auto t1 = high_resolution_clock::now();
+        auto t2 = high_resolution_clock::now();
+        duration<double, std::milli> ms_double;
+
+        // PCA normals don't well until we find a way to correct inversions
+        /*
+        cout << "PCA normals... ";
+        t1 = high_resolution_clock::now();
+        pca_normals(V, N, 10);
+        t2 = high_resolution_clock::now();
+        ms_double = t2 - t1;
+        cout << ms_double.count() << "ms" << endl;
+        */
+        
         V = V * mesh_scale; // welland weights computation performs better with scaling
         V =  V.rowwise() - V.colwise().mean(); // re-center data on origin
 
@@ -873,11 +935,12 @@ namespace mtr {
         Eigen::Matrix<T, -1, 3> C; // implict function constraint points
         Eigen::Matrix<T, -1, 1> D; // implict function values at corresponding constraints
         double eps = epsilon * (V.colwise().minCoeff() - V.colwise().maxCoeff()).norm();
-        auto t1 = high_resolution_clock::now();
-        generate_constraints_and_values(V, N, C, D, eps);
-        auto t2 = high_resolution_clock::now();
-        duration<double, std::milli> ms_double = t2 - t1;
-        cout << "Constraint points and values computed in: " << ms_double.count() << "ms" << endl;
+        t1 = high_resolution_clock::now();
+        cout << "Constraints and values... ";
+        generate_constraints_and_values<T>(V, N, C, D, eps);
+        t2 = high_resolution_clock::now();
+        ms_double = t2 - t1;
+        cout << ms_double.count() << "ms" << endl;
 
         // ### Step 2: Generate Tet grid ###
         Eigen::Matrix<T, -1, 3> TV; //vertices of tet grid
@@ -887,49 +950,54 @@ namespace mtr {
         Eigen::Matrix<T, 1, 3> gmax = V.colwise().maxCoeff(); // grid maximum point
         Eigen::Matrix<T, 1, 3> padding {eps, eps, eps}; // additional padding for the grid
         t1 = high_resolution_clock::now();
-        generate_grid(TV, num_tets, gmin, gmax, padding); // generate grid
-        generate_tets_from_grid(TF, TV, num_tets);
+        cout << "Tet grid... ";
+        generate_grid<T>(TV, num_tets, gmin, gmax, padding); // generate grid
+        generate_tets_from_grid<T>(TF, TV, num_tets);
         t2 = high_resolution_clock::now();
         ms_double = t2 - t1;
-        cout << "Tet grid generated in: " << ms_double.count() << "ms" << endl;
+        cout << ms_double.count() << "ms" << endl;
 
         // ### Step 3: Compute implict function values at all tet grid points ###
         Eigen::Matrix<T, -1, 1> fx;
         t1 = high_resolution_clock::now();
-        compute_implicit_function_values(fx, TV, C, D, welland_radius);
+        cout << "Implict function values... ";
+        compute_implicit_function_values<T>(fx, TV, C, D, welland_radius);
         t2 = high_resolution_clock::now();
         ms_double = t2 - t1;
-        cout << "Implicit function values calculated in: " << ms_double.count() << "ms" << endl;
+        cout << ms_double.count() << "ms" << endl;
 
         // ### Step 4: March tets and extract iso surface ###
         Eigen::Matrix<T, -1, 3> SV; // vertices of reconstructed mesh
         Eigen::Matrix<int, -1, 3> SF; // faces of reconstructed mesh
         t1 = high_resolution_clock::now();
-        marching_tetrahedra(TV, TF, fx, SV, SF);
+        cout << "Marching tetrahedra... ";
+        marching_tetrahedra<T>(TV, TF, fx, SV, SF);
         t2 = high_resolution_clock::now();
         ms_double = t2 - t1;
-        cout << "Marching tetrahedra completed in: " << ms_double.count() << "ms" << endl;
+        cout << ms_double.count() << "ms" << endl;
 
         // ### Cleanup ###
         Eigen::Matrix<T, -1, 3> SV2;
         t1 = high_resolution_clock::now();
-        merge_vertices(SV, SF, 0.00001, SV2);
+        cout << "Vertex merge... ";
+        merge_vertices<T>(SV, SF, 0.00001, SV2);
         t2 = high_resolution_clock::now();
         ms_double = t2 - t1;
-        cout << "Vertices merged in: " << ms_double.count() << "ms" << endl;
+        cout << ms_double.count() << "ms" << endl;
 
         Eigen::Matrix<int, -1, 3> SF2;
         t1 = high_resolution_clock::now();
-        largest_connected_component(SV2, SF, SF2);
+        cout << "Largest connected component search... ";
+        largest_connected_component<T>(SV2, SF, SF2);
         t2 = high_resolution_clock::now();
         ms_double = t2 - t1;
-        cout << "Largest connected component found in: " << ms_double.count() << "ms" << endl;
+        cout << ms_double.count() << "ms" << endl;
 
         // convert data back to vector format
         vector<vector<T>> V2; // reconstructed vertices
         vector<vector<int>> F2; // reconstructed faces
-        matrix_to_2dvector(SV2, V2);
-        matrix_to_2dvector(SF2, F2);
+        matrix_to_2dvector<T, 3>(SV2, V2);
+        matrix_to_2dvector<int, 3>(SF2, F2);
 
         return pair<vector<vector<T>>, vector<vector<int>>>(V2, F2);
     }
