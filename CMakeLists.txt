@@ -13,5 +13,5 @@ file(GLOB SRC_FILES *.cpp)
 #add_executable(${PROJECT_NAME} ${SRC_FILES})
 add_executable(${PROJECT_NAME} main.cpp)
 target_link_libraries(${PROJECT_NAME} PUBLIC igl::glfw)
-add_compile_options(-O3)
+add_compile_options(-g -pg -O3)
 

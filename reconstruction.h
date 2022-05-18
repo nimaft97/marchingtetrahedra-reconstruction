@@ -48,6 +48,7 @@ namespace mtr {
         }
     }
 
+    // suggestion : replace it with a kd-tree
     template <typename T>
     vector<int> points_within_radius(
         const Eigen::Matrix<T, -1, 3> &P, // the set of points to search
@@ -284,6 +285,7 @@ namespace mtr {
         // keep track of which 'set' of tets we are on
         int ti = 0;
 
+        // suggestion : good for SIMD
         // we will iterate over all 'cubes' in the grid and create 6 new tets
         for (int i = 0; i < nx - 1; i++)
         {
@@ -397,6 +399,7 @@ namespace mtr {
         polynomial_basis_vector<T>(2, p, b);
         int min_num_pts = b.size();
 
+        // suggestion : construct a kd-tree and perform range-search
         // evaluate the implict function at each point in the tet grid
         for (int i = 0; i < TV.rows(); i++)
         {
@@ -492,7 +495,7 @@ namespace mtr {
             Eigen::Matrix<T, 1, 3> p2 = G.row(tet(2));
             Eigen::Matrix<T, 1, 3> p3 = G.row(tet(3));
 
-            // implict function values at current tet
+            // implicit function values at current tet
             T v0 = fx(tet(0));
             T v1 = fx(tet(1));
             T v2 = fx(tet(2));
@@ -503,6 +506,10 @@ namespace mtr {
             if (v1 < 0.0) {config += 2;}
             if (v2 < 0.0) {config += 4;}
             if (v3 < 0.0) {config += 8;}
+
+            // suggestion - make it branchless as follows
+            // config += 1*(v0 < 0.0) + 2*(v1 < 0.0) + 4*(v2 < 0.0) + 8*(v3 < 0.0);
+            //
 
             // Create tris based on the configuration we have
             switch (config)
@@ -796,6 +803,7 @@ namespace mtr {
         T dst // to this node
     )
 	{
+        // suggestion : make sure that vec is sorted, then perform binary search
 		if (find(vec.begin(), vec.end(), dst) == vec.end())
 		{
 			vec.push_back(dst);
@@ -807,6 +815,7 @@ namespace mtr {
         const Eigen::Matrix<T, -1, 3> &M // input faces
     )
 	{
+        // suggestion : replace unordered_map with vector<vector<T>>
 		unordered_map<T, vector<T> > adj;
 		for (int i = 0; i < M.rows(); i++)
 		{
@@ -814,6 +823,7 @@ namespace mtr {
 			int v2 = M(i, 1);
 			int v3 = M(i, 2);
 
+            // suggestion : at least, use the pointer returned by find to prevent using hash_map twice
 			if (adj.find(v1) == adj.end()) { adj.insert({ v1, vector<T>() }); }
 			if (adj.find(v2) == adj.end()) { adj.insert({ v2, vector<T>() }); }
 			if (adj.find(v3) == adj.end()) { adj.insert({ v3, vector<T>() }); }
@@ -834,6 +844,7 @@ namespace mtr {
         const Eigen::Matrix<int, -1, 3> &F // face definitions used to compute edges
     ) 
 	{
+        // suggestion : try to get rid of unordered_maps
 		unordered_map<int, vector<int> > adj = adjacency_list<int>(F); // construct adjacency list of connected edges
         unordered_map<int, vector<int>> cc;
 		vector<bool> seen(V.rows(), false); // hold which items we have seen so far
@@ -860,6 +871,7 @@ namespace mtr {
         Eigen::Matrix<int, -1, 3> &F2 // faces defining largest connected component
     )
     {
+        // suggestion : try to replace unordered_map with vector
         unordered_map<int, vector<int>> cc = connected_components<T>(V, F);
         int largest_cc_size = 0;
         int largest_cc_key;
