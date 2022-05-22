@@ -85,7 +85,7 @@ class KdTree {
   // helper variable to check the distance method
   int distance_type;
   bool neighbor_search(const CoordPoint& point, kdtree_node* node, size_t k);
-  void range_search(const CoordPoint& point, kdtree_node* node, double r);
+  void range_search(const CoordPoint& point, kdtree_node* node, double r, bool unique);
   bool bounds_overlap_ball(const CoordPoint& point, double dist,
                            kdtree_node* node);
   bool ball_within_bounds(const CoordPoint& point, double dist,
@@ -106,7 +106,7 @@ class KdTree {
   void k_nearest_neighbors(const CoordPoint& point, size_t k,
                            KdNodeVector* result, KdNodePredicate* pred = NULL);
   void range_nearest_neighbors(const CoordPoint& point, double r,
-                               KdNodeVector* result);
+                               KdNodeVector* result, bool unique);
 };
 
 // *******************************************************
@@ -422,7 +422,7 @@ void KdTree::k_nearest_neighbors(const CoordPoint& point, size_t k,
 //--------------------------------------------------------------
 // modified
 void KdTree::range_nearest_neighbors(const CoordPoint& point, double r,
-                                     KdNodeVector* result) 
+                                     KdNodeVector* result, bool unique) 
 {
   KdNode temp;
 
@@ -438,7 +438,7 @@ void KdTree::range_nearest_neighbors(const CoordPoint& point, double r,
   }
 
   // collect result in neighborheap
-  range_search(point, root, r);
+  range_search(point, root, r, unique);
 
   // copy over result
   for (std::vector<size_t>::iterator i = range_result.begin();
@@ -500,21 +500,21 @@ bool KdTree::neighbor_search(const CoordPoint& point, kdtree_node* node,
 //--------------------------------------------------------------
 // modified
 void KdTree::range_search(const CoordPoint& point, kdtree_node* node,
-                          double r) 
+                          double r, bool unique) 
 {
 
   double curdist = distance->distance(point, node->point);
   if (curdist < r) {
-    if (!node->is_visited){ // modified
+    if (!node->is_visited || !unique){ // modified
       range_result.push_back(node->dataindex);
       node->is_visited = true;
     }
   }
   if (node->loson != NULL && this->bounds_overlap_ball(point, r, node->loson)) {
-    range_search(point, node->loson, r);
+    range_search(point, node->loson, r, unique);
   }
   if (node->hison != NULL && this->bounds_overlap_ball(point, r, node->hison)) {
-    range_search(point, node->hison, r);
+    range_search(point, node->hison, r, unique);
   }
 }
 
