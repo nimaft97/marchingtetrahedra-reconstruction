@@ -2,7 +2,7 @@
 #include "reconstruction.h"
 
 using namespace std;
-using namespace nima;
+using namespace mtr;
 
 int main(int argc, char *argv[])
 { 
@@ -11,6 +11,7 @@ int main(int argc, char *argv[])
     Eigen::Matrix<int, -1, 3> F; // triangle definitions of the provided data
     Eigen::Matrix<double, -1, 3> N; // per-vertex normals of the provided data
     igl::readOFF("../data/bunny.off", V, F);
+    std::cout << "Size of V: " << V.rows() << "\n";
     igl::per_vertex_normals(V, F, N);
 
     // collect data into containers
