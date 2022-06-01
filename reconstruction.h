@@ -9,6 +9,7 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
+#include <cassert>
 
 #include "kdtree.hpp"
 
@@ -19,9 +20,10 @@ namespace mtr {
     using std::chrono::duration;
     using std::chrono::milliseconds;
 
+    // comment : why is switching between vector and matrix required?
     template <typename T, int cols> 
     void matrix_to_2dvector(
-        Eigen::Matrix<T, -1, cols> &matrix, // the matrix to convert
+        Eigen::Matrix<T, -1, cols> const& matrix, // the matrix to convert
         vector<vector<T>> &vec // the vector to fill
     )
     {
@@ -34,7 +36,7 @@ namespace mtr {
     // TODO: move utility functions into the utilities file
     template <typename T, int cols>
     void vector2d_to_matrix(
-        const vector<vector<T>> &vec, // input 2d vector
+        vector<vector<T>> const& vec, // input 2d vector
         Eigen::Matrix<T, -1, cols> &M // matrix to fill
     )
     {
@@ -48,25 +50,25 @@ namespace mtr {
         }
     }
 
-    // suggestion : replace it with a kd-tree
-    template <typename T>
-    vector<int> points_within_radius(
-        const Eigen::Matrix<T, -1, 3> &P, // the set of points to search
-        const Eigen::Matrix<T, 1, 3> &origin, // origin point to compute from
-        T radius // radius of ball
-    )
-    {
-        Eigen::Matrix<T, -1, 1> distances {(P.rowwise() - origin).rowwise().norm()};
-        vector<int> pi;
-        for (int d = 0; d < distances.rows(); d++)
-        {
-            if (distances(d) < radius)
-            {
-                pi.push_back(d); // replace with emplace_back?
-            }
-        }
-        return pi;
-    }
+    // // suggestion : replace it with a kd-tree
+    // template <typename T>
+    // vector<int> points_within_radius(
+    //     const Eigen::Matrix<T, -1, 3> &P, // the set of points to search
+    //     const Eigen::Matrix<T, 1, 3> &origin, // origin point to compute from
+    //     T radius // radius of ball
+    // )
+    // {
+    //     Eigen::Matrix<T, -1, 1> distances {(P.rowwise() - origin).rowwise().norm()};
+    //     vector<int> pi;
+    //     for (int d = 0; d < distances.rows(); d++)
+    //     {
+    //         if (distances(d) < radius)
+    //         {
+    //             pi.push_back(d); // replace with emplace_back?
+    //         }
+    //     }
+    //     return pi;
+    // }
 
     template <typename T, int cols>
     void extract_rows(
@@ -83,13 +85,15 @@ namespace mtr {
         }
     }
 
+    // suggestion : try to implement it more efficiently
+    // suggestion : if vals is sorted, then std::find can be replaced with std::binary_search
     template <typename T>
     void replace_values(
         Eigen::Matrix<T, -1, 3> &M, // matrix to update
         const vector<T> &vals, // values to replace
         T new_val // new value
     )
-    { // could improve this by using a hash map instead, i.e. f_premerge => f_a
+    { // could improve this by using a hash map instead, i.e. f_premerge => f_a // nima : I disagree
         for (int i = 0; i < M.rows(); i++)
         {
             for (int j = 0; j < M.cols(); j++)
@@ -103,6 +107,9 @@ namespace mtr {
         }
     }
 
+    // suggestion : remove it if it's not being used
+    // suggestion : nn_search can be implemented using a Kdtree
+    // suggestion : embarassignly parallel
     template <typename T>
     void pca_normals(
         const Eigen::Matrix<T, -1, 3> &V, // vertices
@@ -151,6 +158,7 @@ namespace mtr {
         }
     }
 
+    // suggestion : embarassignly parallel
     template <typename T>
     pair<Eigen::Matrix<T, 1, 3>, T> compute_constraint_and_value(
         const Eigen::Matrix<T, 1, 3> &v, // given point
@@ -187,6 +195,9 @@ namespace mtr {
         return sqrt(result);
     }
 
+    // suggestion : use a kdtree to find nearest neighbors
+    // suggestion : assign tasks to differnet threads
+    // suggestion : seems like a great fit for SIMD (inside the for loop)
     template <typename T>
     void generate_constraints_and_values(
         const Eigen::Matrix<T, -1, 3> &V, // original vertices
@@ -240,6 +251,7 @@ namespace mtr {
         
     }
  
+    // suggestion : ask for clarification about this function
     template <typename T>
     void generate_grid(
         Eigen::Matrix<T, -1, 3> &V, // vertices of grid to fill
@@ -271,6 +283,7 @@ namespace mtr {
         }
     }
     
+    // suggestion : seems like race condition may happen if parallelized!
     template <typename T>
     void generate_tets_from_grid(
         Eigen::Matrix<int, -1, 4> &TF, // tet definitions
@@ -316,6 +329,7 @@ namespace mtr {
         }
     }
     
+    // suggestion : not computationally intensive but embarassignlt parallel
     template <typename T>
     void polynomial_basis_vector(
         const int degree, // degree of polynomial
@@ -345,6 +359,7 @@ namespace mtr {
         }
     }
 
+    // suggestion : good fit for SIMD
     template <typename T>
     void generate_weights_matrix(
         const Eigen::Matrix<T, -1, 3> &P, // points for computation
@@ -364,6 +379,7 @@ namespace mtr {
         }
     }
 
+    // suggestion : for-loop writes to independent elements - easy to parallelize
     template <typename T>
     void generate_basis_matrix(
         const Eigen::Matrix<T, -1, 3> &P, // points to use for generation
@@ -372,8 +388,8 @@ namespace mtr {
     {
         // compute basis vector for first point to determine basis matrix size
         Eigen::Matrix<T, 1, -1> bv;
-        Eigen::Matrix<T, 1, 3> p {P.row(0)};
-        polynomial_basis_vector<T>(2, p, bv);
+        Eigen::Matrix<T, 1, 3> p {P.row(0)}; // suggestion : isn't it redundant
+        polynomial_basis_vector<T>(2, p, bv); // suggestion : isn't it redundant
 
         B = Eigen::Matrix<T, -1, -1>::Zero(P.rows(), bv.size());
         for (int i = 0; i < P.rows(); i++)
@@ -384,6 +400,7 @@ namespace mtr {
         }
     }
 
+    // suggestion : once the kdtree is built, the rest can be done in parallel
     template <typename T>
     void compute_implicit_function_values(
         Eigen::Matrix<T, -1, 1> &fx, // implicit function values to compute
@@ -399,24 +416,48 @@ namespace mtr {
         polynomial_basis_vector<T>(2, p, b);
         int min_num_pts = b.size();
 
-        // suggestion : construct a kd-tree and perform range-search
+        // suggestion : construct a kd-tree and perform range-search - done!
+        bool unique = false; // it doesn't matter if a node is already visited
+        // constructing KDTree
+        Kdtree::KdNodeVector nodes;
+        for (int i = 0; i < C.rows(); i++)
+        {
+            Kdtree::CoordPoint point(3);
+            point = {C(i, 0), C(i, 1), C(i, 2)};
+            Kdtree::KdNode tmp(point);
+            tmp.idx = i;
+            nodes.push_back(tmp);
+        }
+        Kdtree::KdTree tree(&nodes);
+
         // evaluate the implict function at each point in the tet grid
         for (int i = 0; i < TV.rows(); i++)
         {
-            Eigen::Matrix<T, 1, 3> p {TV.row(i)};
-            vector<int> pi = points_within_radius<T>(C, p, w);            
+            Kdtree::CoordPoint point = {TV(i, 0), TV(i, 1), TV(i, 2)};
+            Kdtree::KdNodeVector result;
+            tree.range_nearest_neighbors(point, w, &result, unique);
+
+            p = TV.row(i);
+            // vector<int> pi = points_within_radius<T>(C, p, w);            
 
             // assume this point is outside of the mesh
-            if(pi.size() <= 0)
+            if(result.size() == 0)
             {
                 fx(i) = 100.0;
             }
             else
             {
+                vector<int> pi2(result.size());
+                std::transform(result.begin(), result.end(), pi2.begin(), [](auto const& node){return node.idx;});
+                // assert (pi.size() == pi2.size());
+                // std::sort(pi.begin(), pi.end());
+                // std::sort(pi2.begin(), pi2.end());
+                // for (int idx = 0; idx < pi.size(); idx++)
+                //     assert(pi[idx] == pi2[idx]);
                 Eigen::Matrix<T, -1, 3> P;
                 Eigen::Matrix<T, -1, 1> values;
-                extract_rows<T, 3>(C, pi, P);
-                extract_rows<T, 1>(D, pi, values);
+                extract_rows<T, 3>(C, pi2, P);
+                extract_rows<T, 1>(D, pi2, values);
 
                 Eigen::Matrix<T, -1, -1> W;
                 Eigen::Matrix<T, -1, -1> B;
@@ -440,6 +481,7 @@ namespace mtr {
         }
     }
     
+    // suggestion : light computation required - embarassingly parallel
     template <typename T>
     Eigen::Matrix<T, 1, 3> generate_triangle_point(
         const Eigen::Matrix<T, 1, 3> &p1,  // point 1 of edge
@@ -468,6 +510,8 @@ namespace mtr {
         }
     }
     
+    // suggestion : v_i and f_i are dynamically allocated. if they are initially of size 9*|Tets| 
+    // then the process can be done in parallel. However, some unused memory will be consumed.
     template <typename T>
     void marching_tetrahedra(
         const Eigen::Matrix<T, -1, 3> &G, // Tet grid vertices
@@ -501,15 +545,15 @@ namespace mtr {
             T v2 = fx(tet(2));
             T v3 = fx(tet(3));
 
+            // suggestion - make it branchless as follows
             // Determine which type of configuration we have
             if (v0 < 0.0) {config += 1;}
             if (v1 < 0.0) {config += 2;}
             if (v2 < 0.0) {config += 4;}
             if (v3 < 0.0) {config += 8;}
 
-            // suggestion - make it branchless as follows
             // config += 1*(v0 < 0.0) + 2*(v1 < 0.0) + 4*(v2 < 0.0) + 8*(v3 < 0.0);
-            //
+            
 
             // Create tris based on the configuration we have
             switch (config)
@@ -718,6 +762,9 @@ namespace mtr {
         }
     }
 
+    // suggestion : not paralleizable!!! range_search requires unique results and it means that
+    // iterations are dependent. Moreover, replace_values may cause race condition if merge_vertices 
+    // is parallelized
     template <typename T>
     void merge_vertices(
         const Eigen::Matrix<T, -1, 3> &V, // original vertices
@@ -743,12 +790,14 @@ namespace mtr {
         vector<Eigen::Matrix<T, 1, 3>> new_verts; // Eigen conservative resize is too heavy, this should be faster
         int current_new_v_i = 0;
 
+        bool unique =  true; // already visited points are not of our interest
+
         for (int i=0; i<V.rows(); i++){
             vector<int> to_merge;
             // range search on KDTree
             Kdtree::CoordPoint point = {V(i, 0), V(i, 1), V(i, 2)};
             Kdtree::KdNodeVector result;
-            tree.range_nearest_neighbors(point, eps, &result);
+            tree.range_nearest_neighbors(point, eps, &result, unique);
             if (result.size() > 0){ // if point was not visited
                 Eigen::Matrix<T, 1, 3> P {0.0, 0.0, 0.0}; // new point
                 for (int j = 0; j < result.size(); j++)
@@ -760,6 +809,7 @@ namespace mtr {
                 }
                 P /= to_merge.size();
                 new_verts.emplace_back(P);
+                // suggestion : can't we accumulate them and call the replace_values once?
                 replace_values(F, to_merge, current_new_v_i);
                 current_new_v_i++;
             }
@@ -772,7 +822,6 @@ namespace mtr {
             V2.row(i) = new_verts[i];
         }
     }
-
 
     template <typename T>
     void depth_first_search(
@@ -788,7 +837,7 @@ namespace mtr {
 
 		for (T i = 0; i < adj.at(u).size(); i++)
 		{
-			T uu = adj.at(u)[i];
+			T uu = adj.at(u)[i]; // suggestion : make a local copy of adj.at(u) instead of accessing it multiple times
 			if (!visisted[uu])
 			{
 				depth_first_search(adj, visisted, output, uu);
@@ -796,6 +845,7 @@ namespace mtr {
 		}
 	}
 
+    // suggestion : make sure that vec is sorted, then perform binary search
     // TODO: move the graph related functions into a graph class
     template <typename T>
     void add_edge(
@@ -803,19 +853,20 @@ namespace mtr {
         T dst // to this node
     )
 	{
-        // suggestion : make sure that vec is sorted, then perform binary search
+        
 		if (find(vec.begin(), vec.end(), dst) == vec.end())
 		{
 			vec.push_back(dst);
 		}
 	}
 
+    // suggestion : replace unordered_map with vector<vector<T>> so that dfs will execute faster as well!
     template <typename T> // this is probably useless, should enforce int type, unless we want to allow for size_t
 	unordered_map<T, vector<T>> adjacency_list( // should be adjacency_list_from_faces or something
         const Eigen::Matrix<T, -1, 3> &M // input faces
     )
 	{
-        // suggestion : replace unordered_map with vector<vector<T>>
+        
 		unordered_map<T, vector<T> > adj;
 		for (int i = 0; i < M.rows(); i++)
 		{
@@ -838,6 +889,7 @@ namespace mtr {
 		return adj;
 	}
 
+    // suggestion : not easy to parallelize! seen vector makes iterations dependent on each other.
     template <typename T>
 	unordered_map<int, vector<int>> connected_components(
         const Eigen::Matrix<T, -1, 3> &V, // vertices
@@ -864,6 +916,8 @@ namespace mtr {
         return cc;
 	}
 
+    // suggestion : new_F seems to be redundant. Why not appending to F2?
+    // suggestion : if some fixed memory is allocated to F2, it can be parallelized! 
     template <typename T>
     void largest_connected_component(
         const Eigen::Matrix<T, -1, 3> &V, // original vertices
