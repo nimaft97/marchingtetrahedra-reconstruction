@@ -15,4 +15,4 @@ add_executable(${PROJECT_NAME} main.cpp)
 target_link_libraries(${PROJECT_NAME} PUBLIC igl::glfw)
 # set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_FLAGS "-O3")
-
+set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 14)

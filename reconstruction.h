@@ -4,6 +4,7 @@
 #include <stack>
 #include <unordered_map>
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <chrono>
 #include <Eigen/Core>
@@ -12,6 +13,33 @@
 #include <cassert>
 
 #include "kdtree.hpp"
+
+namespace utils {
+    using namespace std;
+    void load_pts_from_file(std::vector<std::vector<double>> &v, std::vector<std::vector<double>> &n, std::string filename)
+    {
+        string line, tmp;
+        ifstream myfile (filename);
+        vector<double> input;
+        
+        if (myfile.is_open())
+        {
+            while (getline(myfile, line, ','))
+            {
+                // if our input vector is 'full' empty it into the vertices and normals and reset it
+                if(input.size() == 6){
+                    v.push_back({input.begin(), input.begin() + 3});
+                    n.push_back({input.end() - 3, input.end()});
+                    input.clear();
+                }
+                input.push_back(stod(line));
+            }
+        } else 
+        {
+            cout << "Could not open file " << filename << endl;
+        }
+}
+}
 
 namespace mtr {
     using namespace std;
@@ -233,6 +261,7 @@ namespace mtr {
             // the second nearest is desired since the nearest is the same point
             T nn_dist = distance<T>(query_point, nn[1].point);
 
+            if (nn_dist == 0.0) { nn_dist = 0.1; }
 
             // first set of constraints and points are the vertices themselves
             C.row(i) = V.row(i); // use data vertices as one set of constraints
@@ -971,7 +1000,8 @@ namespace mtr {
         const int nz, // reconstruction grid resolution z-direction
         const double mesh_scale, // scale original mesh
         const double welland_radius, // welland function height parameter
-        const double epsilon // distance control parameter
+        const double epsilon, // distance control parameter
+        const bool return_largest // return largest connected component only
     ) 
     {
         Eigen::Matrix<T, -1, 3> V; // input vertices
@@ -983,16 +1013,6 @@ namespace mtr {
         auto t1 = high_resolution_clock::now();
         auto t2 = high_resolution_clock::now();
         duration<double, std::milli> ms_double;
-
-        // PCA normals don't well until we find a way to correct inversions
-        /*
-        cout << "PCA normals... ";
-        t1 = high_resolution_clock::now();
-        pca_normals(V, N, 10);
-        t2 = high_resolution_clock::now();
-        ms_double = t2 - t1;
-        cout << ms_double.count() << "ms" << endl;
-        */
         
         V = V * mesh_scale; // welland weights computation performs better with scaling
         V =  V.rowwise() - V.colwise().mean(); // re-center data on origin
@@ -1042,31 +1062,36 @@ namespace mtr {
         ms_double = t2 - t1;
         cout << ms_double.count() << "ms" << endl;
 
-        // ### Cleanup ###
-        Eigen::Matrix<T, -1, 3> SV2;
-        t1 = high_resolution_clock::now();
-        cout << "Vertex merge... ";
-        merge_vertices<T>(SV, SF, 0.00001, SV2);
-        t2 = high_resolution_clock::now();
-        ms_double = t2 - t1;
-        cout << ms_double.count() << "ms" << endl;
-
-        Eigen::Matrix<int, -1, 3> SF2;
-        t1 = high_resolution_clock::now();
-        cout << "Largest connected component search... ";
-        largest_connected_component<T>(SV2, SF, SF2);
-        t2 = high_resolution_clock::now();
-        ms_double = t2 - t1;
-        cout << ms_double.count() << "ms" << endl;
-
-        // convert data back to vector format
         vector<vector<T>> V2; // reconstructed vertices
         vector<vector<int>> F2; // reconstructed faces
-        matrix_to_2dvector<T, 3>(SV2, V2);
-        matrix_to_2dvector<int, 3>(SF2, F2);
+        if (return_largest)
+        {
+            // ### Cleanup ###
+            Eigen::Matrix<T, -1, 3> SV2;
+            t1 = high_resolution_clock::now();
+            cout << "Vertex merge... ";
+            merge_vertices<T>(SV, SF, 0.00001, SV2);
+            t2 = high_resolution_clock::now();
+            ms_double = t2 - t1;
+            cout << ms_double.count() << "ms" << endl;
+
+            Eigen::Matrix<int, -1, 3> SF2;
+            t1 = high_resolution_clock::now();
+            cout << "Largest connected component search... ";
+            largest_connected_component<T>(SV2, SF, SF2);
+            t2 = high_resolution_clock::now();
+            ms_double = t2 - t1;
+            cout << ms_double.count() << "ms" << endl;
+
+            // convert data back to vector format
+            matrix_to_2dvector<T, 3>(SV2, V2);
+            matrix_to_2dvector<int, 3>(SF2, F2);
+
+            return pair<vector<vector<T>>, vector<vector<int>>>(V2, F2);
+        }
+        matrix_to_2dvector<T, 3>(SV, V2);
+        matrix_to_2dvector<int, 3>(SF, F2);
 
         return pair<vector<vector<T>>, vector<vector<int>>>(V2, F2);
     }
-
-
 }
