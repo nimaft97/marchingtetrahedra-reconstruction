@@ -12,7 +12,6 @@ int main(int argc, char *argv[])
     std::vector<std::vector<double>> faces;
     
     /* RUN THE ALGO ON THE BUNNY */
-    /*
     Eigen::Matrix<double, -1, 3> V; // vertices of the provided data
     Eigen::Matrix<int, -1, 3> F; // triangle definitions of the provided data
     Eigen::Matrix<double, -1, 3> N; // per-vertex normals of the provided data
@@ -20,13 +19,14 @@ int main(int argc, char *argv[])
     igl::per_vertex_normals(V, F, N);
     matrix_to_2dvector<double, 3>(V, vertices);
     matrix_to_2dvector<double, 3>(N, normals);
-    */
 
     /* RUN THE ALGO ON A TXT FILE PRODUCED FROM utilities/data-utils.py */
-    utils::load_pts_from_file(vertices, normals, "../data/output.txt");
+    // utils::load_pts_from_file(vertices, normals, "../data/output.txt");
 
     std::pair<std::vector<std::vector<double>>, std::vector<std::vector<int>> > R;
-    R = reconstruction<double>(vertices, normals, 75, 75, 75, 200.0, 4.0, 0.01, false);
+    // R = reconstruction<double>(vertices, normals, 75, 75, 75, 200.0, 4.0, 0.01, false);
+    // original bunny
+    R = reconstruction<double>(vertices, normals, 20, 20, 20, 200.0, 4.0, 0.01, true);
 
     // reconstructed mesh in Eigen matrices
     Eigen::Matrix<double, -1, 3> V2;
