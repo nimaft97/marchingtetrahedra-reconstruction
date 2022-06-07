@@ -118,10 +118,13 @@ namespace mtr {
     template <typename T>
     void replace_values(
         Eigen::Matrix<T, -1, 3> &M, // matrix to update
-        const vector<T> &vals, // values to replace
+        const vector<T> &vals, // values to replace 
         T new_val // new value
     )
-    { // could improve this by using a hash map instead, i.e. f_premerge => f_a // nima : I disagree
+    { // could improve this by using a hash map instead, i.e. f_premerge => f_a
+
+        int cnt = vals.size();
+
         for (int i = 0; i < M.rows(); i++)
         {
             for (int j = 0; j < M.cols(); j++)
@@ -130,6 +133,8 @@ namespace mtr {
                 if(find(vals.begin(), vals.end(), M(i,j)) != vals.end() )
                 {
                     M(i,j) = new_val;
+                    cnt--;
+                    if (cnt == 0)   return;
                 }
             }
         }
