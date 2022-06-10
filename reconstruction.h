@@ -1868,9 +1868,6 @@ namespace mtr2 {
     )
     {
 
-        auto F2 = F, F0 = F;
-        mtr::merge_vertices(V, F2, eps, V2);
-
         // constructing KDTree
         Kdtree::KdNodeVector nodes;
         for (int i = 0; i < V.rows(); i++)
