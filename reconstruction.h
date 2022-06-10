@@ -1868,8 +1868,6 @@ namespace mtr2 {
         Eigen::Matrix<T, -1, 3> &V2 // new vertices
     )
     {
-        Eigen::Matrix<int, -1, 3> F2 = F;
-        Eigen::Matrix<int, -1, 3> F0 = F;
 
         // constructing KDTree
         Kdtree::KdNodeVector nodes;
@@ -1945,15 +1943,9 @@ namespace mtr2 {
 
         // replace values
         for (int i=0; i<F.rows(); i++){
-            // assert(F(i,0) != F(i,1) && F(i,0) != F(i,2) && F(i,1) != F(i,2));
-            // assert(F2(i,0) != F2(i,1) && F2(i,0) != F2(i,2) && F2(i,1) != F2(i,2));
-            // assert(F0(i,0) != F0(i,1) && F0(i,0) != F0(i,2) && F0(i,1) != F0(i,2));
             for (int j=0; j<F.cols(); j++){
                 F(i,j) = pid2cluster[F(i,j)];
             }
-            // std::cout << "1. F: " << F(i,0) << ", " << F(i,1) << ", " << F(i,2) << "\n";
-            // std::cout << "2. F2: " << F2(i,0) << ", " << F2(i,1) << ", " << F2(i,2) << "\n";
-            // std::cout << "3. F0: " << F0(i,0) << ", " << F0(i,1) << ", " << F0(i,2) << "\n\n\n"; 
         }
 
         // naive solution to calculate correct centers
@@ -1966,15 +1958,16 @@ namespace mtr2 {
         // fill V2 with new verts
         V2 = Eigen::Matrix<T, -1, 3>::Zero(cid2points.size(), V.cols());
         int i=0;
-        for (auto kv : cid2points){
+        for (const auto kv : cid2points){
             Eigen::Matrix<T, 1, 3> P {0.0, 0.0, 0.0}; // new point
-            for (int id : cid2points[i]){
-                Eigen::Matrix<T, 1, 3> tmp_P {V(i,0), V(i,1), V(i,2)};
+            for (const int id : kv.second){
+                Eigen::Matrix<T, 1, 3> tmp_P {V(id,0), V(id,1), V(id,2)};
                 P += tmp_P;
             }
-            P /= cid2points[i].size();
+            P /= kv.second.size();
             V2.row(i++) = P;
         }
+
     }
 
     template <typename T>
@@ -1985,7 +1978,8 @@ namespace mtr2 {
         T u // element to search for
     )
 	{
-        // std::cout << "u: " << u << "\n";
+        std::cout << u << "\n";
+        assert( "u is out of bounds?" && u < visisted.size() );
         // // TODO: Move this over into a graph class
         // std::cout << "size of adj[u]: ";
         // for (auto nn : adj.at(u))   std::cout << "(" << nn << ", " << visisted[nn] << ") ";
@@ -2057,8 +2051,10 @@ namespace mtr2 {
 	{
         // suggestion : try to get rid of unordered_maps
 		unordered_map<int, vector<int> > adj = adjacency_list<int>(F); // construct adjacency list of connected edges
+
         unordered_map<int, vector<int>> cc;
-		vector<bool> seen(V.rows(), false); // hold which items we have seen so far
+		// vector<bool> seen(V.rows(), false); // hold which items we have seen so far
+        vector<bool> seen(10000, false); // hold which items we have seen so far
 
 		// perform depth first search on each key in the adj_list
         int idx = 0;
