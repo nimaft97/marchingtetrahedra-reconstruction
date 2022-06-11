@@ -14,6 +14,7 @@
 
 #include <iostream>
 #include <set>
+#include <algorithm>
 
 #include "kdtree.hpp"
 
@@ -1111,6 +1112,12 @@ namespace mtr2 {
     using std::chrono::duration;
     using std::chrono::milliseconds;
 
+    struct CP{
+    public:
+        int cid;
+        int pid;
+    };
+
     // comment : why is switching between vector and matrix required?
     template <typename T, int cols> 
     void matrix_to_2dvector(
@@ -1859,6 +1866,35 @@ namespace mtr2 {
         }
     }
 
+    int last_occurrence (const std::vector<CP>& v, int start, int length, int target){
+        int low = start, high = length-1;
+        int result = -1;
+        while (low <= high){
+            int mid = ( low+high )/2;
+            if (v[mid].cid == target){
+            result = mid;
+            low = mid+1;
+            }else if (v[mid].cid < target){
+            low = mid+1;
+            }else{
+            high = mid-1;
+            }
+        }
+        return result;
+    }
+
+    void find_boundaries(const std::vector<CP>& cp_vec, std::vector<int>& boundaries){
+        assert ( "cp_vec doesn't have any elements\n" && cp_vec.size() > 0 );
+        boundaries.push_back(-1);
+        size_t n = cp_vec.size();
+        int result = last_occurrence(cp_vec, 0, n, cp_vec[0].cid);
+        while (result < n){ // n_clusters iterations is required which can be given as an argument
+            boundaries.push_back(result);
+            result = last_occurrence(cp_vec, result+1, n, cp_vec[result+1].cid);
+        }
+        boundaries.push_back(result);
+    }
+
     template <typename T>
     void merge_vertices(
         const Eigen::Matrix<T, -1, 3> &V, // original vertices
@@ -1881,118 +1917,87 @@ namespace mtr2 {
         Kdtree::KdTree tree(&nodes);
 
 
+        int n_points = V.rows();
         bool unique =  false; // so that it is parallelizable
         std::unordered_map<int, std::vector<int>> pid2nn;
-        std::vector<int> pid2cluster(V.rows(), -1);
+        // std::vector<int> pid2cluster(V.rows(), -1);
+        std::vector<CP> cp_vec(V.rows(), {-1, -1});
 
-        for (int i=0; i<V.rows(); i++){
+        for (int i=0; i<n_points; i++){
             vector<int> to_merge;
             // range search on KDTree
             Kdtree::CoordPoint point = {V(i, 0), V(i, 1), V(i, 2)};
             Kdtree::KdNodeVector result;
             tree.range_nearest_neighbors(point, eps, &result, unique);
             assert(result.size() > 0);
-            // Eigen::Matrix<T, 1, 3> P {0.0, 0.0, 0.0}; // new point
             for (int j = 0; j < result.size(); j++)
             {
                 to_merge.push_back(result.at(j).idx);
-                // Eigen::Matrix<T, 1, 3> n_P;
-                // n_P << result.at(j).point.at(0), result.at(j).point.at(1), result.at(j).point.at(2);
-                // P += n_P;
             }
             pid2nn[i] = to_merge;
+            cp_vec[i].pid = i; // initialize point IDs
             if (*std::min_element(to_merge.begin(), to_merge.end()) == i)    
-                pid2cluster[i] = i;
-            // P /= to_merge.size();
-            // new_verts.emplace_back(P);
-            // suggestion : can't we accumulate them and call the replace_values once?
-            // replace_values(F, to_merge, current_new_v_i);
+                // pid2cluster[i] = i;
+                cp_vec[i].cid = i;
         }
+        // --------- all pids have been assigned a unique number in ccd_vec -----------
 
-        int n_points = pid2cluster.size();
         bool should_continue = true;
         while (should_continue){
             should_continue = false;
             for (int i=0; i<n_points; i++){
                 int min_center = n_points; // max_int
                 for (int nn : pid2nn[i]){
-                    if (pid2cluster[nn] == nn){
+                    if (cp_vec[nn].cid == nn){
                         min_center = std::min(min_center, nn);
                     }
                 }
-                if (min_center == n_points){ // s = empty
-                    pid2cluster[i] = i;
+                if (min_center == n_points){ // min_center hasn't been changed -> s is empty
+                    // pid2cluster[i] = i;
+                    cp_vec[i].cid = i;
                     should_continue = true; // at least one element got updated!
                 }
                 else{ // s != empty
-                    if (pid2cluster[i] != min_center){ // either -1 or != min_center
-                        pid2cluster[i] = min_center;
+                    if (cp_vec[i].cid != min_center){
+                        cp_vec[i].cid = min_center;
                         should_continue = true;
                     }
                 }
             }
         }
+        // --------- each point knows its own cluster -----------
 
-        // naive solution to calculate correct centers
-        std::unordered_map<int, std::vector<int>> cid2points;
-        for (int i=0; i<pid2cluster.size(); i++){
-            if (cid2points.count(pid2cluster[i]) > 0)   cid2points[pid2cluster[i]].push_back(i);
-            else    cid2points[pid2cluster[i]] = {i};
-        }
+        // sort
+        std::sort(cp_vec.begin(), cp_vec.end(), [](auto cp1, auto cp2)->bool{return cp1.cid<cp2.cid;});
 
-        // compress cluster IDs
-        std::set<int> cid_set;
-        for (auto kv : cid2points)
-            cid_set.insert(kv.first);
-        
-        // traversing a std::set leads to sorted traversal
-        int new_cid = 0;
-        std::unordered_map<int, int> cid2ccid, ccid2cid; // cluster id to compressed cluster id
-        for (auto it=cid_set.begin(); it!=cid_set.end(); it++){
-            cid2ccid[*it] = new_cid;
-            ccid2cid[new_cid] = *it;
-            new_cid++;
+        // find boundaries
+        std::vector<int> boundaries;
+        find_boundaries(cp_vec, boundaries);
+
+        // calculate cluster centers, populate V2 and compress cluster IDs
+        std::vector<int> pid2ccid(n_points); // point id to compressed cluster id
+        int n_clusters = boundaries.size() - 1;
+        V2 = Eigen::Matrix<T, -1, 3>::Zero(n_clusters, 3);
+        for (int i=0; i<n_clusters; i++){
+            Eigen::Matrix<T, 1, 3> P {0.0, 0.0, 0.0}; // new point
+            int low = boundaries[i]+1, high = boundaries[i+1];
+            for (int j=low; j<=high; j++){
+                int id = cp_vec[j].pid;
+                Eigen::Matrix<T, 1, 3> P_tmp {V(id, 0), V(id, 1), V(id, 2)}; // new point
+                P += P_tmp;
+                // compress 
+                pid2ccid[id] = i;
+            }
+            P /= (float)( high-low+1 );
+            V2.row(i) = P;
         }
 
         // replace values
-        for (int i=0; i<F.rows(); i++){
-            for (int j=0; j<F.cols(); j++){
-                F(i,j) = cid2ccid[pid2cluster[F(i,j)]];
+        int F_rows = F.rows(), F_cols = F.cols();
+        for (int i=0; i<F_rows; i++){
+            for (int j=0; j<F_cols; j++){
+                F(i,j) = pid2ccid[F(i,j)];
             }
-        }
-
-        // for (int i=0; i<F.rows(); i++){
-        //     std::cout << "\nF: " << F(i,0) << "," << F(i,1) << "," << F(i,2) << "\n";
-        //     std::cout << "F2: " << F2(i,0) << "," << F2(i,1) << "," << F2(i,2) << "\n";
-        //     std::cout << "F0: " << F0(i,0) << "," << F0(i,1) << "," << F0(i,2) << "\n\n\n";
-        //     assert (F(i,0) == F2(i,0) && F(i,1) == F2(i,1) && F(i,2) == F2(i,2));
-        // }
-
-        // to make sure that cluster IDs align with their representatives in V2
-        
-        // // fill V2 with new verts
-        // V2 = Eigen::Matrix<T, -1, 3>::Zero(cid2points.size(), V.cols());
-        // for (const auto kv : cid2points){
-        //     Eigen::Matrix<T, 1, 3> P {0.0, 0.0, 0.0}; // new point
-        //     for (const int id : kv.second){
-        //         Eigen::Matrix<T, 1, 3> tmp_P {V(id,0), V(id,1), V(id,2)};
-        //         P += tmp_P;
-        //     }
-        //     P /= kv.second.size();
-        //     V2.row(cid2ccid[kv.first]) = P;
-        // }
-
-        // fill V2 with new verts
-        V2 = Eigen::Matrix<T, -1, 3>::Zero(cid2points.size(), V.cols());
-        for (const auto kv : ccid2cid){
-            auto points = cid2points[kv.second];
-            Eigen::Matrix<T, 1, 3> P {0.0, 0.0, 0.0}; // new point
-            for (const int id : points){
-                Eigen::Matrix<T, 1, 3> tmp_P {V(id,0), V(id,1), V(id,2)};
-                P += tmp_P;
-            }
-            P /= points.size();
-            V2.row(kv.first) = P;
         }
 
     }
