@@ -2,7 +2,7 @@
 #include "reconstruction.h"
 
 using namespace std;
-using namespace mtr2;
+using namespace seq_par;
 
 int main(int argc, char *argv[])
 { 

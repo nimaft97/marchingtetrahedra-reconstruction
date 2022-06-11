@@ -1105,7 +1105,7 @@ namespace mtr {
     }
 }
 
-namespace mtr2 {
+namespace seq_par {
     using namespace std;
     using std::chrono::high_resolution_clock;
     using std::chrono::duration_cast;
