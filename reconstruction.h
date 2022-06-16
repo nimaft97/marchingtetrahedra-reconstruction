@@ -1515,9 +1515,9 @@ namespace seq_par {
     )
     {
         fx = Eigen::Matrix<T, -1, 1>::Zero(TV.rows()); // one function value per grid point
-        Eigen::Matrix<T, 1, 3> p0 {TV.row(0)};
+        Eigen::Matrix<T, 1, 3> p {TV.row(0)};
         Eigen::Matrix<T, 1, -1> b;
-        polynomial_basis_vector<T>(2, p0, b);
+        polynomial_basis_vector<T>(2, p, b);
         int min_num_pts = b.size();
 
         // suggestion : construct a kd-tree and perform range-search - done!
@@ -1535,9 +1535,9 @@ namespace seq_par {
         Kdtree::KdTree tree(&nodes);
 
         // evaluate the implict function at each point in the tet grid
-        // int n_rows = TV.rows();
-        #pragma omp parallel for
-        for (int i = 0; i < TV.rows(); i++)
+        int n_rows = TV.rows();
+        #pragma omp parallel for private(p)
+        for (int i = 0; i < n_rows; i++)
         {
             Kdtree::CoordPoint point = {TV(i, 0), TV(i, 1), TV(i, 2)};
             Kdtree::KdNodeVector result;
@@ -1557,8 +1557,7 @@ namespace seq_par {
                 extract_rows<T, 3>(C, pi2, P);
                 extract_rows<T, 1>(D, pi2, values);
 
-                // p = TV.row(i);
-                Eigen::Matrix<T, 1, 3> p {TV.row(i)};
+                p = TV.row(i);
                 Eigen::Matrix<T, -1, -1> W;
                 Eigen::Matrix<T, -1, -1> B;
                 generate_weights_matrix<T>(P, p, w, W);
