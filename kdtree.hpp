@@ -81,11 +81,11 @@ class KdTree {
   // helper variables and functions for k nearest neighbor search
   std::priority_queue<nn4heap, std::vector<nn4heap>, compare_nn4heap>*
       neighborheap;
-  std::vector<size_t> range_result;
+  // std::vector<size_t> range_result;
   // helper variable to check the distance method
   int distance_type;
   bool neighbor_search(const CoordPoint& point, kdtree_node* node, size_t k);
-  void range_search(const CoordPoint& point, kdtree_node* node, double r, bool unique);
+  void range_search(const CoordPoint& point, kdtree_node* node, double r, bool unique, std::vector<size_t>& range_result);
   bool bounds_overlap_ball(const CoordPoint& point, double dist,
                            kdtree_node* node);
   bool ball_within_bounds(const CoordPoint& point, double dist,
@@ -437,8 +437,9 @@ void KdTree::range_nearest_neighbors(const CoordPoint& point, double r,
     r *= r;
   }
 
+  std::vector<size_t> range_result;
   // collect result in neighborheap
-  range_search(point, root, r, unique);
+  range_search(point, root, r, unique, range_result);
 
   // copy over result
   for (std::vector<size_t>::iterator i = range_result.begin();
@@ -500,9 +501,8 @@ bool KdTree::neighbor_search(const CoordPoint& point, kdtree_node* node,
 //--------------------------------------------------------------
 // modified
 void KdTree::range_search(const CoordPoint& point, kdtree_node* node,
-                          double r, bool unique) 
+                          double r, bool unique, std::vector<size_t>& range_result) 
 {
-
   double curdist = distance->distance(point, node->point);
   if (curdist < r) {
     if (!node->is_visited || !unique){ // modified
@@ -511,10 +511,10 @@ void KdTree::range_search(const CoordPoint& point, kdtree_node* node,
     }
   }
   if (node->loson != NULL && this->bounds_overlap_ball(point, r, node->loson)) {
-    range_search(point, node->loson, r, unique);
+    range_search(point, node->loson, r, unique, range_result);
   }
   if (node->hison != NULL && this->bounds_overlap_ball(point, r, node->hison)) {
-    range_search(point, node->hison, r, unique);
+    range_search(point, node->hison, r, unique, range_result);
   }
 }
 

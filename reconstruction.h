@@ -1535,14 +1535,13 @@ namespace seq_par {
         Kdtree::KdTree tree(&nodes);
 
         // evaluate the implict function at each point in the tet grid
-        for (int i = 0; i < TV.rows(); i++)
+        int n_rows = TV.rows();
+        #pragma omp parallel for private(p)
+        for (int i = 0; i < n_rows; i++)
         {
             Kdtree::CoordPoint point = {TV(i, 0), TV(i, 1), TV(i, 2)};
             Kdtree::KdNodeVector result;
-            tree.range_nearest_neighbors(point, w, &result, unique);
-
-            p = TV.row(i);
-            // vector<int> pi = points_within_radius<T>(C, p, w);            
+            tree.range_nearest_neighbors(point, w, &result, unique); // unique=false -> no conflicts with parallelization        
 
             // assume this point is outside of the mesh
             if(result.size() == 0)
@@ -1553,16 +1552,12 @@ namespace seq_par {
             {
                 vector<int> pi2(result.size());
                 std::transform(result.begin(), result.end(), pi2.begin(), [](auto const& node){return node.idx;});
-                // assert (pi.size() == pi2.size());
-                // std::sort(pi.begin(), pi.end());
-                // std::sort(pi2.begin(), pi2.end());
-                // for (int idx = 0; idx < pi.size(); idx++)
-                //     assert(pi[idx] == pi2[idx]);
                 Eigen::Matrix<T, -1, 3> P;
                 Eigen::Matrix<T, -1, 1> values;
                 extract_rows<T, 3>(C, pi2, P);
                 extract_rows<T, 1>(D, pi2, values);
 
+                p = TV.row(i);
                 Eigen::Matrix<T, -1, -1> W;
                 Eigen::Matrix<T, -1, -1> B;
                 generate_weights_matrix<T>(P, p, w, W);
