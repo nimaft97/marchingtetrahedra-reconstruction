@@ -43,6 +43,9 @@ namespace utils {
             cout << "Could not open file " << filename << endl;
         }
 }
+void load_vertices_and_normals_from_txt(std::vector<std::vector<double>> &v, std::vector<std::vector<double>> &n, std::string filename_vertices, std::string filename_normals){
+    
+}
 }
 
 namespace mtr {
