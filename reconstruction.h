@@ -43,6 +43,20 @@ namespace utils {
             cout << "Could not open file " << filename << endl;
         }
 }
+void load_vertices_and_normals_from_txt(std::vector<std::vector<double>> &vertices, std::vector<std::vector<double>> &normals, int n_lines, std::string filename_vertices, std::string filename_normals){
+    vertices.resize(n_lines);
+    normals.resize(n_lines);
+    std::ifstream infile_verts(filename_vertices), infile_norms(filename_normals);
+    for (int i=0; i<n_lines; i++){
+        std::vector<double> vert(3), norm(3);
+        for (int j=0; j<3; j++){
+            infile_verts >> vert[j];
+            infile_norms >> norm[j];
+        }
+        vertices[i] = vert;
+        normals[i] = norm;
+    }
+}
 }
 
 namespace mtr {

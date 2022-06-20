@@ -23,6 +23,9 @@ int main(int argc, char *argv[])
     /* RUN THE ALGO ON A TXT FILE PRODUCED FROM utilities/data-utils.py */
     // utils::load_pts_from_file(vertices, normals, "../data/output.txt");
 
+    /* RUN THE ALGO ON TXT FILES CONTAINING VERTICES AND NORMALS */
+    // utils::load_vertices_and_normals_from_txt(vertices, normals, 78056, "../data/vertices_happy0-n=78056.txt", "../data/normals_happy0-n=78056.txt");
+
     std::pair<std::vector<std::vector<double>>, std::vector<std::vector<int>> > R;
     // R = reconstruction<double>(vertices, normals, 75, 75, 75, 200.0, 4.0, 0.01, false);
     // original bunny
