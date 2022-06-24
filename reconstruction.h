@@ -1629,11 +1629,20 @@ namespace seq_par {
     void marching_tetrahedra(
         const Eigen::Matrix<T, -1, 3> &G, // Tet grid vertices
         const Eigen::Matrix<int, -1, 4> &Tets, // Tets of the tet grid
-        const Eigen::Matrix<T, -1, 1> &fx, // implict function values at each grid vertex
+        Eigen::Matrix<T, -1, 1> &fx, // implict function values at each grid vertex
         Eigen::Matrix<T, -1, 3> &SV, // reconstructed mesh vertices
         Eigen::Matrix<int, -1, 3> &SF // reconstructed mesh faces
     )
     {
+        assert (fx.rows() == 32*32*32);
+        std::ifstream ifile("../data/mydata.txt");
+
+        for (int i=0; i<fx.rows(); i++){
+            double tmp;
+            ifile >> tmp;
+            fx(i) = tmp-128.0;
+        }
+        ifile.close();
 
         vector<T> v_i; // holder for the mesh vertices we will build
         vector<int> f_i; // holder for the face definition
@@ -2184,7 +2193,7 @@ namespace seq_par {
         V = V * mesh_scale; // welland weights computation performs better with scaling
         V =  V.rowwise() - V.colwise().mean(); // re-center data on origin
 
-        // ### Step 1: Compute constraint points and values ###
+        // // ### Step 1: Compute constraint points and values ###
         Eigen::Matrix<T, -1, 3> C; // implict function constraint points
         Eigen::Matrix<T, -1, 1> D; // implict function values at corresponding constraints
         double eps = epsilon * (V.colwise().minCoeff() - V.colwise().maxCoeff()).norm();
@@ -2220,6 +2229,7 @@ namespace seq_par {
         cout << ms_double.count() << "ms" << endl;
 
         // ### Step 4: March tets and extract iso surface ###
+   
         Eigen::Matrix<T, -1, 3> SV; // vertices of reconstructed mesh
         Eigen::Matrix<int, -1, 3> SF; // faces of reconstructed mesh
         t1 = high_resolution_clock::now();

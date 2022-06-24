@@ -29,7 +29,10 @@ int main(int argc, char *argv[])
     std::pair<std::vector<std::vector<double>>, std::vector<std::vector<int>> > R;
     // R = reconstruction<double>(vertices, normals, 75, 75, 75, 200.0, 4.0, 0.01, false);
     // original bunny
-    R = reconstruction<double>(vertices, normals, 20, 20, 20, 200.0, 4.0, 0.01, true);
+    // R = reconstruction<double>(vertices, normals, 20, 20, 20, 200.0, 4.0, 0.01, true);
+
+    // original Bucky
+    R = reconstruction<double>(vertices, normals, 32, 32, 32, 200.0, 4.0, 0.01, true);
 
     // reconstructed mesh in Eigen matrices
     Eigen::Matrix<double, -1, 3> V2;
